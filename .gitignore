@@ -2,4 +2,8 @@
 .idea
 
 # Data
-*.db
+data
+.DS_Store
+
+# Other
+.DS_Store

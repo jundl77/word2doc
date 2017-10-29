@@ -11,7 +11,8 @@ import json
 import os
 import logging
 import importlib.util
-import utils
+
+from . import utils
 
 from multiprocessing import Pool as ProcessPool
 from tqdm import tqdm

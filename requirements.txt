@@ -1,5 +1,8 @@
-numpy
-regex
-scikit-learn
-scipy
-tqdm
+numpy==1.13.3
+pexpect==4.2.1
+ptyprocess==0.5.2
+regex==2017.9.23
+scikit-learn==0.19.1
+scipy==1.0.0
+sklearn==0.0
+tqdm==4.19.4

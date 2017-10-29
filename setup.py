@@ -1,11 +1,18 @@
-from setuptools import setup, find_packages
+#!/usr/bin/env python3
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 
+from setuptools import setup, find_packages
 
 with open('README.md') as f:
     readme = f.read()
 
 with open('LICENSE') as f:
     license = f.read()
+
+with open('requirements.txt') as f:
+    reqs = f.read()
 
 setup(
     name='word2doc',
@@ -16,5 +23,7 @@ setup(
     author_email='julianbrendl@gmail.com',
     url='https://github.com/jundl77/word2doc',
     license=license,
-    packages=find_packages(exclude=('tests', 'docs'))
+    python_requires='>=3.5',
+    packages=find_packages(exclude=('tests', 'docs', 'data')),
+    install_requires=reqs.strip().split('\n'),
 )

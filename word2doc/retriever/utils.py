@@ -73,7 +73,7 @@ STOPWORDS = {
 
 
 def normalize(text):
-    """Resolve different type of unicode encodings."""
+    """Resolve different type of unicode encodings (normalize to NFD form)."""
     return unicodedata.normalize('NFD', text)
 
 
