@@ -5,8 +5,9 @@
 """Documents, in a sqlite database."""
 
 import sqlite3
-from . import utils
+
 from . import DEFAULTS
+from . import utils
 
 
 class DocDB(object):

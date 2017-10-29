@@ -6,16 +6,16 @@
 """A script to read in and store documents in a sqlite database."""
 
 import argparse
-import sqlite3
-import json
-import os
-import logging
 import importlib.util
+import json
+import logging
+import os
+import sqlite3
+from multiprocessing import Pool as ProcessPool
+
+from tqdm import tqdm
 
 from . import utils
-
-from multiprocessing import Pool as ProcessPool
-from tqdm import tqdm
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

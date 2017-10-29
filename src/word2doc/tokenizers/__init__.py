@@ -21,7 +21,7 @@ from word2doc.tokenizers.simple_tokenizer import SimpleTokenizer
 
 # Spacy is optional
 try:
-    from word2doc.tokenizers.spacy_tokenizer import SpacyTokenizer
+    from src.word2doc.tokenizers import SpacyTokenizer
 except ImportError:
     pass
 

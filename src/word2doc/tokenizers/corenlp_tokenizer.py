@@ -14,8 +14,8 @@ import json
 
 import pexpect
 
-from . import DEFAULTS
 from word2doc.tokenizers.tokenizer import Tokens, Tokenizer
+from . import DEFAULTS
 
 
 class CoreNLPTokenizer(Tokenizer):

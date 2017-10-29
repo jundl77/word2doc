@@ -5,14 +5,14 @@
 """Rank documents with TF-IDF scores"""
 
 import logging
+from functools import partial
+from multiprocessing.pool import ThreadPool
+
 import numpy as np
 import scipy.sparse as sp
 
-from multiprocessing.pool import ThreadPool
-from functools import partial
-
-from . import utils
 from . import DEFAULTS
+from . import utils
 from .. import tokenizers
 
 logger = logging.getLogger(__name__)

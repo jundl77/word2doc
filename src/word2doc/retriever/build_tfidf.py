@@ -5,28 +5,20 @@
 
 """A script to build the tf-idf document matrices for retrieval."""
 
-import numpy as np
-import scipy.sparse as sp
-import argparse
-import os
-import math
 import logging
-
+from collections import Counter
+from functools import partial
 from multiprocessing import Pool as ProcessPool
 from multiprocessing.util import Finalize
-from functools import partial
-from collections import Counter
+
+import numpy as np
+import scipy.sparse as sp
 
 from word2doc import retriever
 from word2doc import tokenizers
+from word2doc.util import logger
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
-console = logging.StreamHandler()
-console.setFormatter(fmt)
-logger.addHandler(console)
-
+logger = logger.get_logger()
 
 # ------------------------------------------------------------------------------
 # Multiprocessing functions
@@ -148,53 +140,3 @@ def get_doc_freqs(cnts):
     binary = (cnts > 0).astype(int)
     freqs = np.array(binary.sum(1)).squeeze()
     return freqs
-
-
-# ------------------------------------------------------------------------------
-# Main.
-# ------------------------------------------------------------------------------
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('db_path', type=str, default=None,
-                        help='Path to sqlite db holding document texts')
-    parser.add_argument('out_dir', type=str, default=None,
-                        help='Directory for saving output files')
-    parser.add_argument('--ngram', type=int, default=2,
-                        help=('Use up to N-size n-grams '
-                              '(e.g. 2 = unigrams + bigrams)'))
-    parser.add_argument('--hash-size', type=int, default=int(math.pow(2, 24)),
-                        help='Number of buckets to use for hashing ngrams')
-    parser.add_argument('--tokenizer', type=str, default='simple',
-                        help=("String option specifying tokenizer type to use "
-                              "(e.g. 'corenlp')"))
-    parser.add_argument('--num-workers', type=int, default=None,
-                        help='Number of CPU processes (for tokenizing, etc)')
-    args = parser.parse_args()
-
-    logging.info('Counting words...')
-    count_matrix, doc_dict = get_count_matrix(
-        args, 'sqlite', {'db_path': args.db_path}
-    )
-
-    logger.info('Making tfidf vectors...')
-    tfidf = get_tfidf_matrix(count_matrix)
-
-    logger.info('Getting word-doc frequencies...')
-    freqs = get_doc_freqs(count_matrix)
-
-    basename = os.path.splitext(os.path.basename(args.db_path))[0]
-    basename += ('-tfidf-ngram=%d-hash=%d-tokenizer=%s' %
-                 (args.ngram, args.hash_size, args.tokenizer))
-    filename = os.path.join(args.out_dir, basename)
-
-    logger.info('Saving to %s.npz' % filename)
-    metadata = {
-        'doc_freqs': freqs,
-        'tokenizer': args.tokenizer,
-        'hash_size': args.hash_size,
-        'ngram': args.ngram,
-        'doc_dict': doc_dict
-    }
-    retriever.utils.save_sparse_csr(filename, tfidf, metadata)
