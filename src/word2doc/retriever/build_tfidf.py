@@ -5,7 +5,7 @@
 
 """A script to build the tf-idf document matrices for retrieval."""
 
-import logging
+import os.path
 from collections import Counter
 from functools import partial
 from multiprocessing import Pool as ProcessPool
@@ -92,19 +92,41 @@ def get_count_matrix(args, db, db_opts):
     )
 
     # Compute the count matrix in steps (to keep in memory)
+    #
+    # row = doc keys
+    # col = doc ids
+    # data = hashed ngrams
     logger.info('Mapping...')
     row, col, data = [], [], []
-    step = max(int(len(doc_ids) / 10), 1)
-    batches = [doc_ids[i:i + step] for i in range(0, len(doc_ids), step)]
-    _count = partial(count, args.ngram, args.hash_size)
-    for i, batch in enumerate(batches):
-        logger.info('-' * 25 + 'Batch %d/%d' % (i + 1, len(batches)) + '-' * 25)
-        for b_row, b_col, b_data in workers.imap_unordered(_count, batch):
-            row.extend(b_row)
-            col.extend(b_col)
-            data.extend(b_data)
-    workers.close()
-    workers.join()
+
+    # Check if a mapping is present, else calculate it
+    mapping_present = False
+    base_dir = "/Users/julianbrendl/Projects/bachelor-thesis/word2doc/data/wikipedia/temp" # TODO: fix paths
+    filename = "docs.npz"
+    mapping_path = os.path.join(base_dir, filename)
+
+    if os.path.isfile(mapping_path):
+        mapping_present = True
+        row, col, data = retriever.utils.load_mapping(mapping_path)
+    else:
+        step = max(int(len(doc_ids) / 10), 1)
+        batches = [doc_ids[i:i + step] for i in range(0, len(doc_ids), step)]
+        _count = partial(count, args.ngram, args.hash_size)
+        for i, batch in enumerate(batches):
+            logger.info('-' * 25 + 'Batch %d/%d' % (i + 1, len(batches)) + '-' * 25)
+            for b_row, b_col, b_data in workers.imap_unordered(_count, batch):
+                row.extend(b_row)
+                col.extend(b_col)
+                data.extend(b_data)
+        workers.close()
+        workers.join()
+
+    # Save mapping if none was found before
+    if not mapping_present:
+        retriever.utils.save_mapping(base_dir, filename, row, col, data)
+
+
+    # TODO: Store data temporarily on hard drive, or even on external drive
 
     logger.info('Creating sparse matrix...')
     count_matrix = sp.csr_matrix(

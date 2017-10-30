@@ -6,11 +6,42 @@
 # LICENSE file in the root directory of this source tree.
 """Various retriever utilities."""
 
+import os
 import regex
+import shutil
 import unicodedata
 import numpy as np
 import scipy.sparse as sp
 from sklearn.utils import murmurhash3_32
+
+
+# ------------------------------------------------------------------------------
+# Sparse matrix saving/loading helpers.
+# ------------------------------------------------------------------------------
+
+
+def save_mapping(base_dir, filename, row, col, data):
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+
+    data = {
+        'row': row,
+        'col': col,
+        'data': data
+    }
+    np.savez(os.path.join(base_dir, filename) , **data)
+
+
+def load_mapping(path):
+    with np.load(path) as data:
+        row = data['row']
+        col = data['col']
+        data = data['data']
+    return row, col, data
+
+
+def delete_mapping(path):
+    shutil.rmtree(path)
 
 
 # ------------------------------------------------------------------------------
