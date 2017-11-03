@@ -106,9 +106,12 @@ def get_count_matrix(args, db, db_opts):
     mapping_path = os.path.join(base_dir, filename)
 
     if os.path.isfile(mapping_path):
+        logger.info("Exisiting mapping found, loading into memory..")
         mapping_present = True
         row, col, data = retriever.utils.load_mapping(mapping_path)
+        logger.info("Loaded mapping into memory.")
     else:
+        logger.info("No exisiting mapping found, creating a new one..")
         step = max(int(len(doc_ids) / 10), 1)
         batches = [doc_ids[i:i + step] for i in range(0, len(doc_ids), step)]
         _count = partial(count, args.ngram, args.hash_size)
@@ -120,10 +123,13 @@ def get_count_matrix(args, db, db_opts):
                 data.extend(b_data)
         workers.close()
         workers.join()
+        logger.info("Creating new mapping.")
 
     # Save mapping if none was found before
     if not mapping_present:
+        logger.info("Saving mapping..")
         retriever.utils.save_mapping(base_dir, filename, row, col, data)
+        logger.info("Saving done.")
 
 
     # TODO: Store data temporarily on hard drive, or even on external drive
