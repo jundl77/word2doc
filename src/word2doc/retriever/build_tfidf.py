@@ -101,17 +101,17 @@ def get_count_matrix(args, db, db_opts):
 
     # Check if a mapping is present, else calculate it
     mapping_present = False
-    base_dir = "/Users/julianbrendl/Projects/bachelor-thesis/word2doc/data/wikipedia/temp" # TODO: fix paths
-    filename = "docs.npz"
+    base_dir = '/Users/julianbrendl/Projects/bachelor-thesis/word2doc/data/wikipedia/temp' # TODO: fix paths
+    filename = 'docs.npz'
     mapping_path = os.path.join(base_dir, filename)
 
     if os.path.isfile(mapping_path):
-        logger.info("Exisiting mapping found, loading into memory..")
+        logger.info('Exisiting mapping found, loading into memory..')
         mapping_present = True
         row, col, data = retriever.utils.load_mapping(mapping_path)
-        logger.info("Loaded mapping into memory.")
+        logger.info('Loaded mapping into memory.')
     else:
-        logger.info("No exisiting mapping found, creating a new one..")
+        logger.info('No exisiting mapping found, creating new mapping..')
         step = max(int(len(doc_ids) / 10), 1)
         batches = [doc_ids[i:i + step] for i in range(0, len(doc_ids), step)]
         _count = partial(count, args.ngram, args.hash_size)
@@ -123,13 +123,13 @@ def get_count_matrix(args, db, db_opts):
                 data.extend(b_data)
         workers.close()
         workers.join()
-        logger.info("Creating new mapping.")
+        logger.info('Creating new mapping.')
 
     # Save mapping if none was found before
     if not mapping_present:
-        logger.info("Saving mapping..")
+        logger.info('Saving mapping..')
         retriever.utils.save_mapping(base_dir, filename, row, col, data)
-        logger.info("Saving done.")
+        logger.info('Saved.')
 
 
     # TODO: Store data temporarily on hard drive, or even on external drive
