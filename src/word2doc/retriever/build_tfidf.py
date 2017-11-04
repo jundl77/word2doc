@@ -131,9 +131,6 @@ def get_count_matrix(args, db, db_opts):
         retriever.utils.save_mapping(base_dir, filename, row, col, data)
         logger.info('Saved.')
 
-
-    # TODO: Store data temporarily on hard drive, or even on external drive
-
     logger.info('Creating sparse matrix...')
     count_matrix = sp.csr_matrix(
         (data, (row, col)), shape=(args.hash_size, len(doc_ids))

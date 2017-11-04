@@ -18,6 +18,11 @@ from .. import tokenizers
 logger = logging.getLogger(__name__)
 
 
+def process(model_location, query, k=5):
+    ranker = TfidfDocRanker(tfidf_path=model_location)
+    doc_names, doc_scores = ranker.closest_docs(query, k)
+
+
 class TfidfDocRanker(object):
     """Loads a pre-weighted inverted index of token/document terms.
     Scores new queries by taking sparse dot products.

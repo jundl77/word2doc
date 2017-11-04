@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 
+from word2doc.retriever import build_db
 from word2doc.retriever import build_tfidf
 from word2doc.retriever import utils
 from word2doc.util import logger
@@ -12,13 +13,14 @@ logger = logger.get_logger()
 # Main.
 # ------------------------------------------------------------------------------
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('db_path', type=str, default=None,
-                        help='Path to sqlite db holding document texts')
+    parser.add_argument('data_path', type=str, help='/path/to/data')
     parser.add_argument('out_dir', type=str, default=None,
                         help='Directory for saving output files')
+    parser.add_argument('--preprocess', type=str, default=None,
+                        help=('File path to a python module that defines '
+                              'a `preprocess` function'))
     parser.add_argument('--ngram', type=int, default=2,
                         help=('Use up to N-size n-grams '
                               '(e.g. 2 = unigrams + bigrams)'))
@@ -30,6 +32,11 @@ if __name__ == '__main__':
     parser.add_argument('--num-workers', type=int, default=None,
                         help='Number of CPU processes (for tokenizing, etc)')
     args = parser.parse_args()
+
+    logger.info('Building database...')
+    build_db.store_contents(
+        args.data_path, args.save_path, args.preprocess, args.num_workers
+    )
 
     logger.info('Counting words...')
     count_matrix, doc_dict = build_tfidf.get_count_matrix(

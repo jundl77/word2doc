@@ -5,7 +5,6 @@
 
 """A script to read in and store documents in a sqlite database."""
 
-import argparse
 import importlib.util
 import json
 import logging
@@ -113,24 +112,3 @@ def store_contents(data_path, save_path, preprocess, num_workers=None):
     logger.info('Committing...')
     conn.commit()
     conn.close()
-
-
-# ------------------------------------------------------------------------------
-# Main.
-# ------------------------------------------------------------------------------
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('data_path', type=str, help='/path/to/data')
-    parser.add_argument('save_path', type=str, help='/path/to/saved/db.db')
-    parser.add_argument('--preprocess', type=str, default=None,
-                        help=('File path to a python module that defines '
-                              'a `preprocess` function'))
-    parser.add_argument('--num-workers', type=int, default=None,
-                        help='Number of CPU processes (for tokenizing, etc)')
-    args = parser.parse_args()
-
-    store_contents(
-        args.data_path, args.save_path, args.preprocess, args.num_workers
-    )

@@ -1,3 +1,4 @@
+prettytable
 numpy==1.13.3
 pexpect==4.2.1
 ptyprocess==0.5.2
