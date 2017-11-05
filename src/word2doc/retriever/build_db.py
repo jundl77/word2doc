@@ -87,8 +87,6 @@ def store_contents(data_path, save_path, preprocess, num_workers=None):
           in and outputs a structured doc.
         num_workers: Number of parallel processes to use when reading docs.
     """
-    if os.path.isfile(save_path):
-        raise RuntimeError('%s already exists! Not overwriting.' % save_path)
 
     logger.info('Reading into database...')
     conn = sqlite3.connect(save_path)
