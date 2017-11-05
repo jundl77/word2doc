@@ -1,23 +1,27 @@
+#!/usr/bin/env python3
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 import argparse
 import math
-import os
 
 from word2doc.retriever import build_db
 from word2doc.retriever import build_tfidf
-from word2doc.retriever import utils
+from word2doc.util import constants
 from word2doc.util import logger
+from word2doc.util import init_project
 
 logger = logger.get_logger()
 
+
 # ------------------------------------------------------------------------------
-# Main.
+# Data pipeline that builds the data .
 # ------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('data_path', type=str, help='/path/to/data')
-    parser.add_argument('out_dir', type=str, default=None,
-                        help='Directory for saving output files')
     parser.add_argument('--preprocess', type=str, default=None,
                         help=('File path to a python module that defines '
                               'a `preprocess` function'))
@@ -33,11 +37,17 @@ if __name__ == '__main__':
                         help='Number of CPU processes (for tokenizing, etc)')
     args = parser.parse_args()
 
+    # Init project
+    init_project.init()
+    save_path = constants.get_db_path()
+
+    # Build database
     logger.info('Building database...')
     build_db.store_contents(
-        args.data_path, args.save_path, args.preprocess, args.num_workers
+        args.data_path, save_path, args.preprocess, args.num_workers
     )
 
+    # Calculate tfidf data
     logger.info('Counting words...')
     count_matrix, doc_dict = build_tfidf.get_count_matrix(
         args, 'sqlite', {'db_path': args.db_path}
@@ -49,17 +59,7 @@ if __name__ == '__main__':
     logger.info('Getting word-doc frequencies...')
     freqs = build_tfidf.get_doc_freqs(count_matrix)
 
-    basename = os.path.splitext(os.path.basename(args.db_path))[0]
-    basename += ('-tfidf-ngram=%d-hash=%d-tokenizer=%s' %
-                 (args.ngram, args.hash_size, args.tokenizer))
-    filename = os.path.join(args.out_dir, basename)
+    # Save to disk
+    build_tfidf.save_tfidf(args, tfidf, freqs)
 
-    logger.info('Saving to %s.npz' % filename)
-    metadata = {
-        'doc_freqs': freqs,
-        'tokenizer': args.tokenizer,
-        'hash_size': args.hash_size,
-        'ngram': args.ngram,
-        'doc_dict': doc_dict
-    }
-    utils.save_sparse_csr(filename, tfidf, metadata)
+    logger.info('Done.')

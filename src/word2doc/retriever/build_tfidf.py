@@ -17,6 +17,7 @@ import scipy.sparse as sp
 from word2doc import retriever
 from word2doc import tokenizers
 from word2doc.util import logger
+from word2doc.util import constants
 
 logger = logger.get_logger()
 
@@ -27,6 +28,8 @@ logger = logger.get_logger()
 DOC2IDX = None
 PROCESS_TOK = None
 PROCESS_DB = None
+
+TEMP_DIR = ''
 
 
 def init(tokenizer_class, db_class, db_opts):
@@ -77,7 +80,7 @@ def get_count_matrix(args, db, db_opts):
     M[i, j] = # times word i appears in document j.
     """
     # Map doc_ids to indexes
-    global DOC2IDX
+    global DOC2IDX, TEMP_DIR
     db_class = retriever.get_class(db)
     with db_class(**db_opts) as doc_db:
         doc_ids = doc_db.get_doc_ids()
@@ -101,9 +104,9 @@ def get_count_matrix(args, db, db_opts):
 
     # Check if a mapping is present, else calculate it
     mapping_present = False
-    base_dir = '/Users/julianbrendl/Projects/bachelor-thesis/word2doc/data/wikipedia/temp' # TODO: fix paths
-    filename = 'docs.npz'
-    mapping_path = os.path.join(base_dir, filename)
+    TEMP_DIR = os.path.join(constants.get_data_dir(), 'temp')
+    filename = 'doc_mapping.npz'
+    mapping_path = os.path.join(TEMP_DIR, filename)
 
     if os.path.isfile(mapping_path):
         logger.info('Exisiting mapping found, loading into memory..')
@@ -128,7 +131,7 @@ def get_count_matrix(args, db, db_opts):
     # Save mapping if none was found before
     if not mapping_present:
         logger.info('Saving mapping..')
-        retriever.utils.save_mapping(base_dir, filename, row, col, data)
+        retriever.utils.save_mapping(TEMP_DIR, filename, row, col, data)
         logger.info('Saved.')
 
     logger.info('Creating sparse matrix...')
@@ -165,3 +168,29 @@ def get_doc_freqs(cnts):
     binary = (cnts > 0).astype(int)
     freqs = np.array(binary.sum(1)).squeeze()
     return freqs
+
+
+# ------------------------------------------------------------------------------
+# Save final results to disk
+# ------------------------------------------------------------------------------
+
+
+def save_tfidf(args, tfidf, freqs):
+    global TEMP_DIR
+    basename = os.path.splitext(os.path.basename(constants.get_db_path()))[0]
+    basename += ('-tfidf-ngram=%d-hash=%d-tokenizer=%s' %
+                 (args.ngram, args.hash_size, args.tokenizer))
+    filename = os.path.join(constants.get_data_dir(), basename)
+
+    logger.info('Saving to %s.npz' % filename)
+    metadata = {
+        'doc_freqs': freqs,
+        'tokenizer': args.tokenizer,
+        'hash_size': args.hash_size,
+        'ngram': args.ngram,
+        'doc_dict': doc_dict
+    }
+    retrieveri.utils.save_sparse_csr(filename, tfidf, metadata)
+
+    logger.info('Deleting mapping...')
+    retriever.utils.delete_mapping(TEMP_DIR)
