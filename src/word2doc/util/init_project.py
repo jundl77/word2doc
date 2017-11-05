@@ -26,11 +26,8 @@ def init_constants():
 def init_project_root():
     cur_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Set to util directory
-    root_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
-
     # Set to word2doc directory
-    root_dir = os.path.abspath(os.path.join(root_dir, os.pardir))
+    root_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
 
     # Set to src directory
     root_dir = os.path.abspath(os.path.join(root_dir, os.pardir))

@@ -16,7 +16,7 @@ logger = logger.get_logger()
 
 
 # ------------------------------------------------------------------------------
-# Data pipeline that builds the data .
+# Data pipeline that builds the processes the data for the retriever.
 # ------------------------------------------------------------------------------
 
 if __name__ == '__main__':
