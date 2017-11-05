@@ -5,6 +5,7 @@
 
 import argparse
 import math
+import os
 
 from word2doc.retriever import build_db
 from word2doc.retriever import build_tfidf
@@ -41,16 +42,19 @@ if __name__ == '__main__':
     init_project.init()
     save_path = constants.get_db_path()
 
-    # Build database
-    logger.info('Building database...')
-    build_db.store_contents(
-        args.data_path, save_path, args.preprocess, args.num_workers
-    )
+    # Build database if it does not already exist
+    if not os.path.isfile(save_path):
+        logger.info('No database found. Building database...')
+        build_db.store_contents(
+            args.data_path, save_path, args.preprocess, args.num_workers
+        )
+    else:
+        logger.info('Existing database found. Using database.')
 
     # Calculate tfidf data
     logger.info('Counting words...')
     count_matrix, doc_dict = build_tfidf.get_count_matrix(
-        args, 'sqlite', {'db_path': args.db_path}
+        args, 'sqlite', {'db_path': save_path}
     )
 
     logger.info('Making tfidf vectors...')
