@@ -114,7 +114,7 @@ def get_count_matrix(args, db, db_opts):
         row, col, data = retriever.utils.load_mapping(mapping_path)
         logger.info('Loaded mapping into memory.')
     else:
-        logger.info('No exisiting mapping found, creating new mapping..')
+        logger.info('No existing mapping found, creating new mapping..')
         step = max(int(len(doc_ids) / 10), 1)
         batches = [doc_ids[i:i + step] for i in range(0, len(doc_ids), step)]
         _count = partial(count, args.ngram, args.hash_size)
@@ -175,7 +175,7 @@ def get_doc_freqs(cnts):
 # ------------------------------------------------------------------------------
 
 
-def save_tfidf(args, tfidf, freqs):
+def save_tfidf(args, tfidf, freqs, doc_dict):
     global TEMP_DIR
     basename = os.path.splitext(os.path.basename(constants.get_db_path()))[0]
     basename += ('-tfidf-ngram=%d-hash=%d-tokenizer=%s' %
@@ -190,7 +190,7 @@ def save_tfidf(args, tfidf, freqs):
         'ngram': args.ngram,
         'doc_dict': doc_dict
     }
-    retrieveri.utils.save_sparse_csr(filename, tfidf, metadata)
+    retriever.utils.save_sparse_csr(filename, tfidf, metadata)
 
     logger.info('Deleting mapping...')
     retriever.utils.delete_mapping(TEMP_DIR)

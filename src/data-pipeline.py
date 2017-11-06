@@ -64,6 +64,6 @@ if __name__ == '__main__':
     freqs = build_tfidf.get_doc_freqs(count_matrix)
 
     # Save to disk
-    build_tfidf.save_tfidf(args, tfidf, freqs)
+    build_tfidf.save_tfidf(args, tfidf, freqs, doc_dict)
 
     logger.info('Done.')
