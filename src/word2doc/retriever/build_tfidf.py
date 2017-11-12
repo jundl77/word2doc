@@ -5,6 +5,7 @@
 
 """A script to build the tf-idf document matrices for retrieval."""
 
+import json
 import os.path
 from collections import Counter
 from functools import partial
@@ -178,8 +179,7 @@ def get_doc_freqs(cnts):
 def save_tfidf(args, tfidf, freqs, doc_dict):
     global TEMP_DIR
     basename = os.path.splitext(os.path.basename(constants.get_db_path()))[0]
-    basename += ('-tfidf-ngram=%d-hash=%d-tokenizer=%s' %
-                 (args.ngram, args.hash_size, args.tokenizer))
+    basename += 'r_model.npz'
     filename = os.path.join(constants.get_data_dir(), basename)
 
     logger.info('Saving to %s.npz' % filename)
@@ -190,6 +190,11 @@ def save_tfidf(args, tfidf, freqs, doc_dict):
         'ngram': args.ngram,
         'doc_dict': doc_dict
     }
+
+    # Save metadata to r_model_meta.json
+    with open(constants.get_retriever_model_meta_path(), 'w+') as f:
+        json.dump(metadata, f, ensure_ascii=False)
+
     retriever.utils.save_sparse_csr(filename, tfidf, metadata)
 
     logger.info('Deleting mapping...')

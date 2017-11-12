@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 """Rank documents with TF-IDF scores"""
 
-import logging
 from functools import partial
 from multiprocessing.pool import ThreadPool
 
@@ -14,8 +13,9 @@ import scipy.sparse as sp
 from . import DEFAULTS
 from . import utils
 from .. import tokenizers
+from word2doc.util import logger
 
-logger = logging.getLogger(__name__)
+logger = logger.get_logger()
 
 
 def process(model_location, query, k=5):

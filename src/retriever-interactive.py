@@ -50,6 +50,7 @@ def get_doc(doc_id):
     global PROCESS_DB
     doc = PROCESS_DB.get_doc_text(doc_id)
     print(doc)
+    return doc
 
 
 banner = """
