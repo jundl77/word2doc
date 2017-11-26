@@ -30,7 +30,8 @@ class LabelExtractor:
         if len(p_array[index]) < MIN_PP_LENGTH:
             return self.__first_paragraph(p_array, index + 1)
 
-        return p_array[index]
+        # Get first sentence only
+        return p_array[index].split('.')[0]
 
 
 
