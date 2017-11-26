@@ -39,13 +39,11 @@ def calculate_rankings(query, k=5):
 
     scores = MODEL.calculate_rankings(query, k)
     table = prettytable.PrettyTable(
-        ['Rank', 'Doc Id', 'Doc Score', 'Label Embedding Score', 'Title Embedding Score', 'Keyword Embedding Score']
+        ['Doc Id', 'Doc Score', 'Label Embedding Score', 'Title Embedding Score', 'Keyword Embedding Score']
     )
 
-    i = 0
     for t, s in scores.items():
-        table.add_row([i + 1, t, '%.5g' % s[0], s[1], s[2], s[3]])
-        i += 1
+        table.add_row([t, '%.5g' % s[0], s[1], s[2], s[3]])
     print(table)
 
 
