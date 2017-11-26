@@ -27,6 +27,9 @@ class LabelExtractor:
     def __first_paragraph(self, p_array, index):
         """Sometimes first paragraph is title or subtitle etc. Make sure we get the first "true" paragraph"""
 
+        if index >= len(p_array):
+            return p_array[1].split('.')[0]
+
         if len(p_array[index]) < MIN_PP_LENGTH:
             return self.__first_paragraph(p_array, index + 1)
 

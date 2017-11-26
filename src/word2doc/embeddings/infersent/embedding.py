@@ -2,6 +2,7 @@ import numpy as np
 import torch
 
 
+# TODO: change this eventually
 GLOVE_PATH = '/Users/julianbrendl/Projects/bachelor-thesis/word2doc/src/word2doc/embeddings/infersent/dataset/GloVe/glove.840B.300d.txt'
 MODEL_PATH = '/Users/julianbrendl/Projects/bachelor-thesis/word2doc/src/word2doc/embeddings/infersent/encoder/infersent.allnli.pickle'
 
