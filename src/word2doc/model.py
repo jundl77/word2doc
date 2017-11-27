@@ -9,8 +9,9 @@ from functools import reduce
 
 from word2doc import retriever
 from word2doc.util import logger
-from word2doc.labels import extractor
 from word2doc.util import constants
+from word2doc.util import analytics
+from word2doc.labels import extractor
 from word2doc.embeddings import infersent
 from word2doc.references import reference_graph_builder
 from word2doc.keywords import rake_extractor
@@ -22,6 +23,7 @@ class Model:
         db_class = retriever.get_class('sqlite')
 
         self.logger = logger.get_logger()
+        self.analytics = analytics.Analytics()
 
         self.process_db = db_class(db_path)
         self.ranker = retriever.get_class('tfidf')(tfidf_path=tfidf_model)
@@ -29,6 +31,9 @@ class Model:
         self.infersent = infersent.get_infersent()
         self.rake = rake_extractor.RakeExtractor()
         self.lables = {}
+
+    def get_analytics(self):
+        return self.analytics
 
     def process(self, query):
         return self.calculate_rankings(query, 5)
@@ -81,13 +86,11 @@ class Model:
         ref_graph = rgraph_builder.build_references_graph(doc_names)
         filtered_docs = rgraph_builder.filter_titles(query, doc_names, ref_graph, self.infersent)
         self.logger.info('Docs kept: ' + str(filtered_docs))
+
+        # Update analytics
+        self.analytics.reference_graph_analytics(doc_names, filtered_docs)
+
         return filtered_docs
-
-    def get_doc(self, doc_id):
-        return self.process_db.get_doc_text(doc_id)
-
-    def get_label(self, doc_id):
-        return self.lables[doc_id]
 
     def __reject_outliers(self, data, m = 2.):
         d = np.abs(data - np.median(data))

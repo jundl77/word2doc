@@ -45,6 +45,10 @@ def calculate_rankings(query, k=5):
         table.add_row([t, '%.5g' % s[0], s[1], s[2], s[3]])
     print(table)
 
+    analytics = MODEL.get_analytics()
+    analytics.save_to_file()
+    analytics.report()
+
 
 banner = """
 Interactive TF-IDF Retriever

@@ -12,6 +12,8 @@ def debug_optimizer_preprocessor():
     m = Model(constants.get_db_path(), constants.get_retriever_model_path())
     pp = preprocess.OptimizerPreprocessor(m)
     res = pp.preprocess()
+
+    m.get_analytics().save_to_file()
     print(res)
 
 
@@ -26,4 +28,8 @@ def debug_references():
     print(result)
 
 
-debug_references()
+#debug_references()
+
+
+
+

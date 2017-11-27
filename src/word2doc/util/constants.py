@@ -10,6 +10,8 @@ import os
 # General
 PROJECT_ROOT_DIR = ''
 DATA_DIR_NAME = 'data'
+LOGS_DIR_NAME = 'logs'
+ANALYTICS_FILE_NAME = 'analytics.json'
 
 # Wikipedia inverted index
 DOCS_DB_NAME = 'docs.db'
@@ -41,6 +43,18 @@ def get_root_dir():
 
 def get_data_dir():
     return os.path.join(get_root_dir(), DATA_DIR_NAME)
+
+
+def get_logs_dir():
+    return os.path.join(get_root_dir(), LOGS_DIR_NAME)
+
+
+# ------------------------------------------------------------------------------
+# Analytics paths
+# ------------------------------------------------------------------------------
+
+def get_analytics_path():
+    return os.path.join(get_logs_dir(), ANALYTICS_FILE_NAME)
 
 
 # ------------------------------------------------------------------------------

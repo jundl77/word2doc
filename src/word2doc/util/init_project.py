@@ -51,6 +51,10 @@ def init_file_structure():
     if not os.path.exists(constants.get_data_dir()):
         os.makedirs(constants.get_data_dir())
 
+    # Create logs folder
+    if not os.path.exists(constants.get_logs_dir()):
+        os.makedirs(constants.get_logs_dir())
+
 
 # ------------------------------------------------------------------------------
 # Init file structure
