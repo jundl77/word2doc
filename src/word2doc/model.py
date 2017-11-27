@@ -41,7 +41,7 @@ class Model:
         self.logger.info('Docs found: ' + str(doc_names))
 
         # Filter out more specific docs with reference tree
-        doc_names = self.__filter_reference(doc_names)
+        doc_names = self.__filter_reference(query, doc_names)
 
         # Perform sentence embeddings
         embedding_scores = []
@@ -52,16 +52,16 @@ class Model:
             self.lables[doc_names[i]] = label
 
             # Embedding label
-            score = self.infersent.compare_sentences(query.lower(), label.lower())
+            score = self.infersent.compare_sentences(query, label)
             embedding_scores.append(score)
 
             # Embedding title
-            score_title = self.infersent.compare_sentences(query.lower(), doc_names[i].lower())
+            score_title = self.infersent.compare_sentences(query, doc_names[i])
             title_scores.append(score_title)
 
             # Embedding keywords
             keywords = self.rake.extract(label.lower())
-            keyword_embeddings = list(map(lambda w: self.infersent.compare_sentences(query.lower(), w), keywords))
+            keyword_embeddings = list(map(lambda w: self.infersent.compare_sentences(query, w), keywords))
             print('\n\nDocument: ' + doc_names[i])
             list(filter(lambda k: print("Keyword: " + str(k[0]) + " --- Score: " + str(k[1])), list(zip(keywords, keyword_embeddings))))
             # keyword_embeddings = reject_outliers(keyword_embeddings)
@@ -73,14 +73,15 @@ class Model:
 
         return scores
 
-    def __filter_reference(self, doc_names):
+    def __filter_reference(self, query, doc_names):
         """Filter out more specific docs with reference tree"""
+
         self.logger.info('Filter out more specific docs with reference tree')
         rgraph_builder = reference_graph_builder.ReferencesGraphBuilder()
         ref_graph = rgraph_builder.build_references_graph(doc_names)
-        doc_names = list(map(lambda child: child, ref_graph.get_children()))
-        self.logger.info('Docs kept: ' + str(doc_names))
-        return doc_names
+        filtered_docs = rgraph_builder.filter_titles(query, doc_names, ref_graph, self.infersent)
+        self.logger.info('Docs kept: ' + str(filtered_docs))
+        return filtered_docs
 
     def get_doc(self, doc_id):
         return self.process_db.get_doc_text(doc_id)

@@ -6,11 +6,11 @@
 
 import argparse
 import code
-import sys
 import prettytable
 
 from word2doc import model
 from word2doc.util import logger
+from word2doc.util import init_project
 
 logger = logger.get_logger()
 
@@ -18,8 +18,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('db_path', type=str, help='/path/to/db')
 parser.add_argument('--model', type=str, default=None)
 args = parser.parse_args()
-
-sys.path.append('/Users/julianbrendl/Projects/bachelor-thesis/word2doc/src/word2doc/embeddings/infersent/')
 
 
 # ------------------------------------------------------------------------------
@@ -31,6 +29,7 @@ MODEL = None
 
 def init(db_path, model_path):
    global MODEL
+   init_project.init()
    MODEL = model.Model(db_path, model_path)
 
 

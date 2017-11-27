@@ -6,12 +6,15 @@
 """Initialize the entire project."""
 
 import os
+import sys
+
 from word2doc.util import constants
 
 
 def init():
     init_constants()
     init_file_structure()
+    init_sys_path()
 
 
 # ------------------------------------------------------------------------------
@@ -47,3 +50,12 @@ def init_file_structure():
     # Create data folder
     if not os.path.exists(constants.get_data_dir()):
         os.makedirs(constants.get_data_dir())
+
+
+# ------------------------------------------------------------------------------
+# Init file structure
+# ------------------------------------------------------------------------------
+
+
+def init_sys_path():
+    sys.path.append(os.path.join(constants.get_root_dir(), 'src/word2doc/embeddings/infersent/'))

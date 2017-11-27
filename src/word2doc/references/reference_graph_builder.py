@@ -8,6 +8,7 @@
 import requests
 import json
 import re
+
 from word2doc.references.reference_node import ReferenceNode
 
 
@@ -24,23 +25,48 @@ class ReferencesGraphBuilder:
         for title in doc_titles:
             references = self.__extract_references(title)
 
-            if self.graph.get_distant_child(title) is None:
+            node = self.graph.get_distant_child(title)
+            if node is None:
                 node = ReferenceNode(title)
                 self.__distribute_references(node, references)
                 self.graph.add_child(node)
             else:
-                node = self.graph.get_distant_child(title)
                 self.__distribute_references(node, references)
 
         return self.graph
 
+    def filter_titles(self, query, doc_titles, graph, embedding):
+        result = doc_titles[:]
+
+        for t, c in graph.get_children().items():
+            for title in doc_titles:
+
+                if c.get_distant_child(title) is not None:
+                    this_score = embedding.compare_sentences(query, title)
+                    relative_score = embedding.compare_sentences(query, t)
+
+                    if this_score > relative_score:
+                        result = self.__remove_relative(result, t)
+                    else:
+                        result = self.__remove_relative(result, title)
+
+        return result
+
+    def __remove_relative(self, doc_titles, relative):
+        if relative in doc_titles:
+            doc_titles.remove(relative)
+
+        return doc_titles
+
     def __distribute_references(self, node, references):
         """Distribute references across nodes"""
+
         for ref in references:
-            if self.graph.get_distant_child(ref) is None:
+            child = self.graph.get_distant_child(ref)
+
+            if child is None:
                 child = ReferenceNode(ref)
             else:
-                child = self.graph.get_distant_child(ref)
                 if child.get_title() in self.graph.get_children() and child.get_distant_child(node.get_title()) is None:
                     self.graph.remove_child(child.get_title())
 
@@ -48,8 +74,9 @@ class ReferencesGraphBuilder:
 
     def __extract_references(self, title):
         """Find out what references are in the document with the title 'title'"""
+
         text = self.__get_text(title)
-        doc_regex = r'({{Main( article)?(\|[\w ]+)+}})'
+        doc_regex = r'(?i)({{Main( article)?(\|[\w ]+)+}})'
         ref_regex = r'(\|([\w ]+))'
         matches = re.findall(doc_regex, text)
         doc_matches = list(map(lambda m: m[0], matches))
@@ -63,8 +90,10 @@ class ReferencesGraphBuilder:
 
     def __get_text(self, title):
         """Get the text for the document with the title 'title'"""
+
         doc_title = title.replace(" ", "_")
         request_url = 'https://en.wikipedia.org/w/api.php?action=query&titles=' + doc_title + \
                       '&prop=revisions&rvprop=content&format=json'
         response = requests.get(request_url)
         return json.dumps(response.json())
+

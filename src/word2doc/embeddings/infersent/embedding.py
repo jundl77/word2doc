@@ -16,7 +16,7 @@ class InferSent:
         self.model.build_vocab_k_words(K=500000)
 
     def compare_sentences(self, sen1, sen2):
-        return self.__cosine(self.model.encode([sen1])[0], self.model.encode([sen2])[0])
+        return self.__cosine(self.model.encode([sen1.lower()])[0], self.model.encode([sen2.lower()])[0])
 
     def __cosine(self, u, v):
         return np.dot(u, v) / (np.linalg.norm(u) * np.linalg.norm(v))
