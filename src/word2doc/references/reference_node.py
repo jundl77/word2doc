@@ -7,9 +7,11 @@
 
 
 class ReferenceNode:
+    recursion_depth = 0
 
     def __init__(self, title):
         self.title = title
+        self.recursion_depth = 0 #TODO: fix hack
         self.children = {}
 
     def get_title(self):
@@ -25,10 +27,13 @@ class ReferenceNode:
         del self.children[title]
 
     def get_distant_child(self, title):
-        if title in self.children:
+        if self.recursion_depth > 100:
+            return None
+        elif title in self.children:
             return self.get_child(title)
         else:
             for t, c in self.children.items():
+                self.recursion_depth += 1
                 res = c.get_distant_child(title)
                 if res is not None:
                     return res

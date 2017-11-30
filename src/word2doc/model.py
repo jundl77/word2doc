@@ -67,10 +67,12 @@ class Model:
             # Embedding keywords
             keywords = self.rake.extract(label.lower())
             keyword_embeddings = list(map(lambda w: self.infersent.compare_sentences(query, w), keywords))
-            print('\n\nDocument: ' + doc_names[i])
-            list(filter(lambda k: print("Keyword: " + str(k[0]) + " --- Score: " + str(k[1])), list(zip(keywords, keyword_embeddings))))
+
             # keyword_embeddings = reject_outliers(keyword_embeddings)
-            keyword_scores.append(reduce(lambda x, y: x + y, keyword_embeddings) / len(keyword_embeddings))
+            if len(keyword_embeddings) == 0:
+                keyword_scores.append(0)
+            else:
+                keyword_scores.append(reduce(lambda x, y: x + y, keyword_embeddings) / len(keyword_embeddings))
 
         scores = {}
         for i in range(len(doc_names)):

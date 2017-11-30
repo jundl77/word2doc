@@ -1,4 +1,4 @@
-from word2doc.optimizer import preprocess
+from word2doc.optimizer import pre_process
 from word2doc.util import constants
 from word2doc.util import init_project
 from word2doc.model import Model
@@ -10,11 +10,10 @@ init_project.init()
 
 def debug_optimizer_preprocessor():
     m = Model(constants.get_db_path(), constants.get_retriever_model_path())
-    pp = preprocess.OptimizerPreprocessor(m)
-    res = pp.preprocess()
+    pp = pre_process.OptimizerPreprocessor(m)
 
     m.get_analytics().save_to_file()
-    print(res)
+    print(pp)
 
 
 def debug_references():
@@ -28,7 +27,7 @@ def debug_references():
     print(result)
 
 
-#debug_references()
+debug_optimizer_preprocessor()
 
 
 

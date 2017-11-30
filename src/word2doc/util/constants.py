@@ -12,6 +12,7 @@ PROJECT_ROOT_DIR = ''
 DATA_DIR_NAME = 'data'
 LOGS_DIR_NAME = 'logs'
 ANALYTICS_FILE_NAME = 'analytics.json'
+N_WORKERS = 1
 
 # Wikipedia inverted index
 DOCS_DB_NAME = 'docs.db'
@@ -28,6 +29,20 @@ SQUAD_TRAIN_NAME = 'train-v1.1.json'
 
 
 # ------------------------------------------------------------------------------
+# Number of workers
+# ------------------------------------------------------------------------------
+
+def get_number_workers():
+    return N_WORKERS
+
+
+def set_number_workers(n):
+    global N_WORKERS
+    N_WORKERS = n
+    return N_WORKERS
+
+
+# ------------------------------------------------------------------------------
 # General paths
 # ------------------------------------------------------------------------------
 
@@ -37,7 +52,6 @@ def set_root_dir(path):
 
 
 def get_root_dir():
-    global PROJECT_ROOT_DIR
     return PROJECT_ROOT_DIR
 
 
