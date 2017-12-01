@@ -3,8 +3,6 @@
 
 # Data
 data
-dataset
-infersent.allnli.pickle
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

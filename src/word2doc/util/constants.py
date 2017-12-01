@@ -27,6 +27,14 @@ SQUAD_DIR_NAME = 'squad'
 SQUAD_DEV_NAME = 'dev-v1.1.json'
 SQUAD_TRAIN_NAME = 'train-v1.1.json'
 
+# GloVe dir
+GLOVE_DIR_PATH = 'GloVe'
+GLOVE_840B_300D_NAME = 'glove.840B.300d.txt'
+
+# Infersent data
+INFERSENT_DIR_NAME = 'infersent'
+INFERSENT_MODEL_NAME = 'infersent.allnli.pickle'
+
 
 # ------------------------------------------------------------------------------
 # Number of workers
@@ -72,7 +80,7 @@ def get_analytics_path():
 
 
 # ------------------------------------------------------------------------------
-# Retriever paths
+# Data-set paths
 # ------------------------------------------------------------------------------
 
 def get_db_path():
@@ -85,6 +93,22 @@ def get_retriever_model_path():
 
 def get_retriever_model_meta_path():
     return os.path.join(get_data_dir(), RETRIEVER_MODEL_META_NAME)
+
+
+def get_glove_dir():
+    return os.path.join(get_data_dir(), GLOVE_DIR_PATH)
+
+
+def get_glove_840b_300d_path():
+    return os.path.join(get_glove_dir(), GLOVE_840B_300D_NAME)
+
+
+def get_infersent_dir_path():
+    return os.path.join(get_data_dir(), INFERSENT_DIR_NAME)
+
+
+def get_infersent_model_path():
+    return os.path.join(get_infersent_dir_path(), INFERSENT_MODEL_NAME)
 
 
 # ------------------------------------------------------------------------------

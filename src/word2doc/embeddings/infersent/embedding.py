@@ -1,18 +1,15 @@
 import numpy as np
 import torch
 
-
-# TODO: change this eventually
-GLOVE_PATH = '/Users/julianbrendl/Projects/bachelor-thesis/word2doc/src/word2doc/embeddings/infersent/dataset/GloVe/glove.840B.300d.txt'
-MODEL_PATH = '/Users/julianbrendl/Projects/bachelor-thesis/word2doc/src/word2doc/embeddings/infersent/encoder/infersent.allnli.pickle'
+from word2doc.util import constants
 
 
 class InferSent:
 
     def __init__(self):
-        self.model = torch.load(MODEL_PATH, map_location=lambda storage, loc: storage)
-        torch.set_num_threads(8)
-        self.model.set_glove_path(GLOVE_PATH)
+        self.model = torch.load(constants.get_infersent_model_path(), map_location=lambda storage, loc: storage)
+        torch.set_num_threads(constants.get_number_workers())
+        self.model.set_glove_path(constants.get_glove_840b_300d_path())
         self.model.build_vocab_k_words(K=500000)
 
     def compare_sentences(self, sen1, sen2):
