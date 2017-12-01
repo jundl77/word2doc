@@ -37,7 +37,6 @@ class ReferenceNode:
                 self.recursion_depth += 1
                 res = c.get_distant_child(title)
                 if res is not None:
-                    self.recursion_depth = 0
                     return res
 
         self.recursion_depth = 0
