@@ -14,6 +14,9 @@ LOGS_DIR_NAME = 'logs'
 ANALYTICS_FILE_NAME = 'analytics.json'
 N_WORKERS = 1
 
+# Wikipedia extraction path
+WIKI_EXTRACT_NAME = 'wiki'
+
 # Wikipedia inverted index
 DOCS_DB_NAME = 'docs.db'
 RETRIEVER_MODEL_NAME = 'r_model.npz'
@@ -82,6 +85,9 @@ def get_analytics_path():
 # ------------------------------------------------------------------------------
 # Data-set paths
 # ------------------------------------------------------------------------------
+
+def get_wiki_extract_path():
+    return os.path.join(get_data_dir(), WIKI_EXTRACT_NAME)
 
 def get_db_path():
     return os.path.join(get_data_dir(), DOCS_DB_NAME)

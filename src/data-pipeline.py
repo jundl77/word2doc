@@ -7,6 +7,7 @@ import argparse
 import math
 import os
 
+from word2doc.wikiextractor import wiki_extractor
 from word2doc.retriever import build_db
 from word2doc.retriever import build_tfidf
 from word2doc.util import constants
@@ -22,7 +23,7 @@ logger = logger.get_logger()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('data_path', type=str, help='/path/to/data')
+    parser.add_argument('data_path', type=str, help='/path/to/wikidump')
     parser.add_argument('--preprocess', type=str, default=None,
                         help=('File path to a python module that defines '
                               'a `preprocess` function'))
@@ -39,15 +40,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Init project
-    init_project.init()
+    init_project.init(args.num_workers)
     save_path = constants.get_db_path()
+
+    # Extract text from wikipedia dump
+    wiki_extractor.extract_wiki(args.data_path, output=constants.get_wiki_extract_path(), json=True, references=True)
 
     # Build database if it does not already exist
     if not os.path.isfile(save_path):
         logger.info('No database found. Building database...')
-        build_db.store_contents(
-            args.data_path, save_path, args.preprocess, args.num_workers
-        )
+        build_db.store_contents(args.data_path, save_path, args.preprocess)
     else:
         logger.info('Existing database found. Using database.')
 

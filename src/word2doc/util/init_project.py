@@ -11,10 +11,11 @@ import sys
 from word2doc.util import constants
 
 
-def init():
+def init(num_workers):
     init_constants()
     init_file_structure()
     init_sys_path()
+    constants.set_number_workers(num_workers)
 
 
 # ------------------------------------------------------------------------------

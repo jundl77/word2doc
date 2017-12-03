@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from . import utils
 from word2doc.util import logger
+from word2doc.util import constants
 
 logger = logger.get_logger()
 
@@ -77,7 +78,7 @@ def get_contents(filename):
     return documents
 
 
-def store_contents(data_path, save_path, preprocess, num_workers=None):
+def store_contents(data_path, save_path, preprocess):
     """Preprocess and store a corpus of documents in sqlite.
     Args:
         data_path: Root path to directory (or directory of directories) of files
@@ -85,8 +86,9 @@ def store_contents(data_path, save_path, preprocess, num_workers=None):
         save_path: Path to output sqlite db.
         preprocess: Path to file defining a custom `preprocess` function. Takes
           in and outputs a structured doc.
-        num_workers: Number of parallel processes to use when reading docs.
     """
+
+    num_workers = constants.get_number_workers()
 
     logger.info('Reading into database...')
     conn = sqlite3.connect(save_path)
