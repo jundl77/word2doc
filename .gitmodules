@@ -1,0 +1,3 @@
+[submodule "src/word2doc/wikiextractor"]
+	path = src/word2doc/wikiextractor
+	url = https://github.com/attardi/wikiextractor/
