@@ -29,7 +29,7 @@ MODEL = None
 
 def init(db_path, model_path):
    global MODEL
-   init_project.init()
+   init_project.init(1)
    MODEL = model.Model(db_path, model_path)
 
 
