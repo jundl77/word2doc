@@ -5,7 +5,7 @@ from word2doc.model import Model
 from word2doc.references import reference_graph_builder
 from word2doc.embeddings import infersent
 
-init_project.init()
+init_project.init(1)
 
 
 def debug_optimizer_preprocessor():
@@ -27,7 +27,7 @@ def debug_references():
     print(result)
 
 
-debug_optimizer_preprocessor()
+debug_references()
 
 
 

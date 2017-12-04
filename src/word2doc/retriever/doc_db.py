@@ -5,6 +5,7 @@
 """Documents, in a sqlite database."""
 
 import sqlite3
+import json
 
 from . import DEFAULTS
 from . import utils
@@ -51,3 +52,26 @@ class DocDB(object):
         result = cursor.fetchone()
         cursor.close()
         return result if result is None else result[0]
+
+    def get_doc_url(self, doc_id):
+        """Fetch the url of the doc for 'doc_id'."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT url FROM documents WHERE id = ?",
+            (utils.normalize(doc_id),)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        return result if result is None else result[0]
+
+    def get_doc_references(self, doc_id):
+        """Fetch the references of the doc for 'doc_id'."""
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT refs FROM documents WHERE id = ?",
+            (utils.normalize(doc_id),)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        result = result if result is None else result[0]
+        return json.loads(result)

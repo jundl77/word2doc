@@ -179,7 +179,7 @@ def get_doc_freqs(cnts):
 def save_tfidf(args, tfidf, freqs, doc_dict):
     global TEMP_DIR
     basename = os.path.splitext(os.path.basename(constants.get_db_path()))[0]
-    basename += 'r_model.npz'
+    basename = os.path.join(basename, 'r_model.npz')
     filename = os.path.join(constants.get_data_dir(), basename)
 
     logger.info('Saving to %s.npz' % filename)
