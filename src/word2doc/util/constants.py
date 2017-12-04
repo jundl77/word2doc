@@ -89,6 +89,7 @@ def get_analytics_path():
 def get_wiki_extract_path():
     return os.path.join(get_data_dir(), WIKI_EXTRACT_NAME)
 
+
 def get_db_path():
     return os.path.join(get_data_dir(), DOCS_DB_NAME)
 
@@ -135,3 +136,4 @@ def get_squad_dev_path():
 
 def get_squad_train_path():
     return os.path.join(get_squad_dir(), SQUAD_TRAIN_NAME)
+

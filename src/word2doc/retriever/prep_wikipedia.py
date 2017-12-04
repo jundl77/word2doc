@@ -7,6 +7,8 @@
 import regex as re
 from html.parser import HTMLParser
 
+from word2doc.util import constants
+
 PARSER = HTMLParser()
 BLACKLIST = set(['23443579', '52643645'])  # Conflicting disambig. pages
 
@@ -30,4 +32,7 @@ def preprocess(article):
         return None
 
     # Return doc with `id` set to `title`
-    return {'id': article['title'], 'text': article['text']}
+    return {'id': article['title'],
+            'url': article['url'],
+            'references': article['references'],
+            'text': article['text']}

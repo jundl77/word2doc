@@ -44,12 +44,13 @@ if __name__ == '__main__':
     save_path = constants.get_db_path()
 
     # Extract text from wikipedia dump
-    wiki_extractor.extract_wiki(args.data_path, output=constants.get_wiki_extract_path(), json=True, references=True)
+    if not os.path.isdir(constants.get_wiki_extract_path()):
+        wiki_extractor.extract_wiki(args.data_path, output=constants.get_wiki_extract_path(), json=True, references=True)
 
     # Build database if it does not already exist
     if not os.path.isfile(save_path):
         logger.info('No database found. Building database...')
-        build_db.store_contents(args.data_path, save_path, args.preprocess)
+        build_db.store_contents(constants.get_wiki_extract_path(), save_path, args.preprocess)
     else:
         logger.info('Existing database found. Using database.')
 
