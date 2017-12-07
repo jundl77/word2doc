@@ -4,6 +4,7 @@ from word2doc.util import init_project
 from word2doc.model import Model
 from word2doc.references import reference_graph_builder
 from word2doc.embeddings import infersent
+from word2doc.optimizer.net import train
 
 init_project.init(1)
 
@@ -27,7 +28,11 @@ def debug_references():
     print(result)
 
 
-debug_references()
+def debug_net():
+    train.train()
+
+
+debug_net()
 
 
 
