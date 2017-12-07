@@ -9,3 +9,4 @@ regex
 rake-nltk
 prettytable
 bashplotlib
+pexpect

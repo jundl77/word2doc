@@ -26,16 +26,18 @@ class ReferenceNode:
         del self.children[title]
 
     def get_distant_child(self, title):
+        self.recursion_depth = 0
+        self.__get_distant_child_helper(title)
+
+    def __get_distant_child_helper(self, title):
         if self.recursion_depth > 100:
-            self.recursion_depth = 0
             return None
         elif title in self.children:
-            self.recursion_depth = 0
             return self.get_child(title)
         else:
             for t, c in self.children.items():
                 self.recursion_depth += 1
-                res = c.get_distant_child(title)
+                res = c.__get_distant_child_helper(title)
                 if res is not None:
                     return res
 

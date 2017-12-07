@@ -31,8 +31,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Init project
-    init_project.init()
-    constants.set_number_workers(args.num_workers)
+    init_project.init(args.num_workers)
 
     # Load pre_processor
     m = Model(constants.get_db_path(), constants.get_retriever_model_path())
