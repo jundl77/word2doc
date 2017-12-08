@@ -83,11 +83,9 @@ class Model:
     def __filter_reference(self, query, doc_names):
         """Filter out more specific docs with reference tree"""
 
-        self.logger.info('Filter out more specific docs with reference tree')
         rgraph_builder = reference_graph_builder.ReferencesGraphBuilder()
         ref_graph = rgraph_builder.build_references_graph(doc_names)
         filtered_docs = rgraph_builder.filter_titles(query, doc_names, ref_graph, self.infersent)
-        self.logger.info('Docs kept: ' + str(filtered_docs))
 
         # Update analytics
         self.analytics.reference_graph_analytics(doc_names, filtered_docs)
