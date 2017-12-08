@@ -12,7 +12,7 @@ class OptimizerNet:
         # Parameters
         self.learning_rate = 0.001
         self.training_epochs = 15
-        self.batch_size = 50
+        self.batch_size = 1
         self.display_step = 1
 
         # Network Parameters
@@ -22,8 +22,8 @@ class OptimizerNet:
         self.n_classes = 5    # one of 5 classes
 
         # tf Graph input
-        self.X = tf.placeholder("float", [None, self.n_input])
-        self.Y = tf.placeholder("float", [None, self.n_classes])
+        self.X = tf.placeholder(tf.float32, [None, self.n_input])
+        self.Y = tf.placeholder(tf.int32, [None, self.n_classes])
 
         # Store layers weight & bias
         self.weights = {
@@ -59,9 +59,16 @@ class OptimizerNet:
                 doc_scores += [float(s) for s in scores_local]
 
             if not doc_id == -1:
+                # Make sure all score arrays have 5 docs
                 while not len(doc_scores) == 20:
                     doc_scores += [-1000.0, -1000.0, -1000.0, -1000.0]
-                labels.append(doc_id)
+
+                # 1-hot encode
+                one_hot = [0, 0, 0, 0, 0]
+                one_hot[doc_id] = 1
+
+                # Add to arrays
+                labels.append(one_hot)
                 scores.append(doc_scores)
 
         return scores, labels
@@ -95,6 +102,7 @@ class OptimizerNet:
 
         # Load data
         train_x, train_y = self.load_data('data/squad/dev-v1.1/1-queries.npy')
+        test_x, test_y = self.load_data('data/squad/dev-v1.1/2-queries.npy')
 
         # Define loss and optimizer
         loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=self.Y))
@@ -115,7 +123,12 @@ class OptimizerNet:
                 # Loop over all batches
                 for i in range(total_batch):
                     batch_x = train_x[self.batch_size * i:self.batch_size * (i + 1)]
+                    #batch_x = [item for sublist in batch_x for item in sublist]
+                    #batch_x = np.reshape(batch_x, (1, self.n_input))
+
                     batch_y = train_y[self.batch_size * i:self.batch_size * (i + 1)]
+                    #batch_y = [item for sublist in batch_y for item in sublist]
+                    #batch_y = np.reshape(batch_y, (1, self.n_classes))
 
                     # Run optimization op (backprop) and cost op (to get loss value)
                     _, c = sess.run([train_op, loss_op], feed_dict={self.X: batch_x, self.Y: batch_y})
@@ -133,4 +146,4 @@ class OptimizerNet:
             correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(self.Y, 1))
             # Calculate accuracy
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-            print("Accuracy:", accuracy.eval({self.X: mnist.test.images, self.Y: mnist.test.labels}))
+            print("Accuracy:", accuracy.eval({self.X: test_x, self.Y: test_y}))
