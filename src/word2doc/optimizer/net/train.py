@@ -5,9 +5,6 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-from tensorflow.examples.tutorials.mnist import input_data
-mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
-
 
 class OptimizerNet:
 
@@ -19,10 +16,10 @@ class OptimizerNet:
         self.display_step = 1
 
         # Network Parameters
-        self.n_hidden_1 = 20 # 1st layer number of neurons
-        self.n_hidden_2 = 20 # 2nd layer number of neurons
-        self.n_input = 20 # MNIST data input (img shape: 28*28)
-        self.n_classes = 5 # MNIST total classes (0-9 digits)
+        self.n_hidden_1 = 20  # 1st layer number of neurons
+        self.n_hidden_2 = 20  # 2nd layer number of neurons
+        self.n_input = 20     # 20 values from pre-processing
+        self.n_classes = 5    # one of 5 classes
 
         # tf Graph input
         self.X = tf.placeholder("float", [None, self.n_input])
@@ -62,6 +59,8 @@ class OptimizerNet:
                 doc_scores += [float(s) for s in scores_local]
 
             if not doc_id == -1:
+                while not len(doc_scores) == 20:
+                    doc_scores += [-1000.0, -1000.0, -1000.0, -1000.0]
                 labels.append(doc_id)
                 scores.append(doc_scores)
 
@@ -115,8 +114,8 @@ class OptimizerNet:
 
                 # Loop over all batches
                 for i in range(total_batch):
-                    batch_x = train_x.get_next()
-                    batch_y = None
+                    batch_x = train_x[self.batch_size * i:self.batch_size * (i + 1)]
+                    batch_y = train_y[self.batch_size * i:self.batch_size * (i + 1)]
 
                     # Run optimization op (backprop) and cost op (to get loss value)
                     _, c = sess.run([train_op, loss_op], feed_dict={self.X: batch_x, self.Y: batch_y})
