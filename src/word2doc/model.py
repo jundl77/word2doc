@@ -43,7 +43,6 @@ class Model:
 
         # Get candidate labels for candidate doc
         e = extractor.LabelExtractor(constants.get_db_path())
-        self.logger.info('Docs found: ' + str(doc_names))
 
         # Filter out more specific docs with reference tree
         doc_names = self.__filter_reference(query, doc_names)
