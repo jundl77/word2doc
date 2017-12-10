@@ -54,7 +54,7 @@ class OptimizerPreprocessor:
     def pre_process_squad(self, path, bin_id):
 
         # Bin ids should start with 0, so add 1 (because of slurm queue)
-        bin_id += 1
+        bin_id += 11
 
         # Define path to bin folder
         bin_dir_path = os.path.splitext(path)[0]
