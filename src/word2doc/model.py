@@ -39,7 +39,11 @@ class Model:
         return self.calculate_rankings(query, 5)
 
     def calculate_rankings(self, query, k=5):
-        doc_names, doc_scores = self.ranker.closest_docs(query, k)
+        try:
+            doc_names, doc_scores = self.ranker.closest_docs(query, k)
+        except RuntimeError:
+            return None
+
 
         # Get candidate labels for candidate doc
         e = extractor.LabelExtractor(constants.get_db_path())

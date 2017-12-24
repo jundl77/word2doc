@@ -54,7 +54,7 @@ class OptimizerPreprocessor:
     def pre_process_squad(self, path, bin_id):
 
         # Bin ids should start with 0, so add 1 (because of slurm queue)
-        bin_id += 11
+        #bin_id += 21
 
         # Define path to bin folder
         bin_dir_path = os.path.splitext(path)[0]
@@ -78,11 +78,14 @@ class OptimizerPreprocessor:
                     for qa in qas:
                         question = qa['question']
 
+                        docs = self.model.calculate_rankings(question)
+
                         # Run through model
-                        queries[question] = {
-                            'label': title,
-                            'docs': self.model.calculate_rankings(question)
-                        }
+                        if docs is not None:
+                            queries[question] = {
+                                'label': title,
+                                'docs': docs
+                            }
 
                 pbar.update()
 
