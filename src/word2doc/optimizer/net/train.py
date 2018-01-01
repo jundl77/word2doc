@@ -16,33 +16,40 @@ class OptimizerNet:
     def __init__(self):
         self.logger = logger.get_logger()
 
-        # Parameters
-        self.learning_rate = 0.001
-        self.training_epochs = 15
-        self.batch_size = 20
-        self.display_step = 1
+        with tf.name_scope("hyper-params"):
+            # Parameters
+            self.learning_rate = 0.001
+            self.training_epochs = 100
+            self.batch_size = 20
+            self.display_step = 1
 
-        # Network Parameters
-        self.n_hidden_1 = 100   # 1st layer number of neurons
-        self.n_hidden_2 = 1000  # 2nd layer number of neurons
-        self.n_input = 20     # 20 values from pre-processing
-        self.n_classes = 5    # one of 5 classes
+            # Network Parameters
+            self.n_hidden_1 = 100  # 1st layer number of neurons
+            self.n_hidden_2 = 100  # 2nd layer number of neurons
+            self.n_hidden_3 = 100  # 3rd layer number of neurons
+            self.n_input = 20     # 20 values from pre-processing
+            self.n_classes = 5    # one of 5 classes
 
         # tf Graph input
-        self.X = tf.placeholder(tf.float32, [None, self.n_input])
-        self.Y = tf.placeholder(tf.int32, [None, self.n_classes])
+        with tf.name_scope('input'):
+            self.X = tf.placeholder(tf.float32, [None, self.n_input])
+            self.Y = tf.placeholder(tf.int32, [None, self.n_classes])
 
         # Store layers weight & bias
-        self.weights = {
-            'h1': tf.Variable(tf.random_normal([self.n_input, self.n_hidden_1])),
-            'h2': tf.Variable(tf.random_normal([self.n_hidden_1, self.n_hidden_2])),
-            'out': tf.Variable(tf.random_normal([self.n_hidden_2, self.n_classes]))
-        }
-        self.biases = {
-            'b1': tf.Variable(tf.random_normal([self.n_hidden_1])),
-            'b2': tf.Variable(tf.random_normal([self.n_hidden_2])),
-            'out': tf.Variable(tf.random_normal([self.n_classes]))
-        }
+        with tf.name_scope("weights"):
+            self.weights = {
+                'h1': tf.Variable(tf.random_normal([self.n_input, self.n_hidden_1])),
+                'h2': tf.Variable(tf.random_normal([self.n_hidden_1, self.n_hidden_2])),
+                'h3': tf.Variable(tf.random_normal([self.n_hidden_2, self.n_hidden_3])),
+                'out': tf.Variable(tf.random_normal([self.n_hidden_3, self.n_classes]))
+            }
+        with tf.name_scope("biases"):
+            self.biases = {
+                'b1': tf.Variable(tf.random_normal([self.n_hidden_1])),
+                'b2': tf.Variable(tf.random_normal([self.n_hidden_2])),
+                'b3': tf.Variable(tf.random_normal([self.n_hidden_3])),
+                'out': tf.Variable(tf.random_normal([self.n_classes]))
+            }
 
     def load_data(self, path):
         self.logger.info("Load data..")
@@ -114,8 +121,11 @@ class OptimizerNet:
         # Hidden fully connected layer with 20 neurons
         layer_2 = tf.add(tf.matmul(layer_1, self.weights['h2']), self.biases['b2'])
 
+        # Hidden fully connected layer with 20 neurons
+        layer_3 = tf.add(tf.matmul(layer_2, self.weights['h3']), self.biases['b3'])
+
         # Output fully connected layer with a neuron for each class
-        out_layer = tf.matmul(layer_2, self.weights['out']) + self.biases['out']
+        out_layer = tf.matmul(layer_3, self.weights['out']) + self.biases['out']
 
         return out_layer
 
@@ -129,21 +139,40 @@ class OptimizerNet:
 
         # Scramble data
         train_x, train_y = self.scramble_data(train_x, train_y)
+        test_x, test_y = self.scramble_data(test_x, test_y)
 
-        # Define loss and optimizer
-        loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=self.Y))
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-        train_op = optimizer.minimize(loss_op)
+        # Define network functions
+        with tf.name_scope('cost'):
+            cost_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=self.Y))
+
+        with tf.name_scope('train'):
+            train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(cost_op)
+
+        with tf.name_scope('accuracy'):
+            pred = tf.nn.softmax(logits)
+            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(self.Y, 1))
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
         # Initializing the variables
         init = tf.global_variables_initializer()
 
+        # Create a summary for tensorboard
+        tf.summary.scalar("cost", cost_op)
+        tf.summary.scalar("accuracy", accuracy)
+
+        # Merge all summaries into a single operation
+        summary_op = tf.summary.merge_all()
+
         with tf.Session() as sess:
             sess.run(init)
 
+            # Set up tensorboard
+            train_summary_writer = tf.summary.FileWriter(constants.get_tensorboard_train_path(), sess.graph)
+            validation_summary_writer = tf.summary.FileWriter(constants.get_tensorboard_dev_path(), sess.graph)
+
             # Training cycle
             for epoch in range(self.training_epochs):
-                avg_cost = 0.
+                # avg_loss = 0.
                 total_batch = int(len(train_x) / self.batch_size)
 
                 # Loop over all batches
@@ -154,16 +183,24 @@ class OptimizerNet:
                         batch_y = train_y[self.batch_size * i:self.batch_size * (i + 1)]
 
                         # Run optimization op (backprop) and cost op (to get loss value)
-                        _, c = sess.run([train_op, loss_op], feed_dict={self.X: batch_x, self.Y: batch_y})
+                        _, summary_train = sess.run([train_op, summary_op], feed_dict={self.X: batch_x, self.Y: batch_y})
+
+                        # Get test accuracy
+                        summary_test = sess.run([summary_op], feed_dict={self.X: test_x, self.Y: test_y})
 
                         # Compute average loss
-                        avg_cost += c / total_batch
+                        # avg_loss += loss / total_batch
+
+                        # Update tensorboard
+                        train_summary_writer.add_summary(summary_train, epoch * total_batch + i)
+                        validation_summary_writer.add_summary(summary_test[0], epoch * total_batch + i)
 
                         pbar.update()
 
                 # Display logs per epoch step
                 if epoch % self.display_step == 0:
-                    print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_cost))
+                    # print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_loss))
+                    print("Epoch:", '%04d' % (epoch+1))
 
             print("Optimization Finished!")
 
