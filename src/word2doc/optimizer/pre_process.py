@@ -95,10 +95,13 @@ class OptimizerPreprocessor:
         np.save(name, queries)
 
     def merge_bins(self, num_bins):
+        self.logger.info('Merging bins..')
         self.__merge_bins_squad(constants.get_squad_train_path(), num_bins)
         self.__merge_bins_squad(constants.get_squad_dev_path(), num_bins)
 
     def __merge_bins_squad(self, path, num_bins):
+        self.logger.info('Merging bins in ' + path)
+
         # Define path to bin folder
         bin_dir_path = os.path.splitext(path)[0]
 
@@ -112,5 +115,9 @@ class OptimizerPreprocessor:
             # Append bin to all data
             data.update(squad_dict)
 
+        self.logger.info('Done.')
         name = bin_dir_path + '-queries.npy'
+
+        self.logger.info('Saving to ' + name)
         np.save(name, data)
+        self.logger.info('Saved.')

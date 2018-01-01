@@ -10,6 +10,7 @@ from word2doc.util import logger
 from word2doc.util import init_project
 from word2doc.optimizer import pre_process
 from word2doc.model import Model
+from word2doc.optimizer.net.train import OptimizerNet
 
 logger = logger.get_logger()
 
@@ -35,14 +36,20 @@ if __name__ == '__main__':
     # Init project
     init_project.init(args.num_workers)
 
-    # Load pre_processor
-    # m = Model(constants.get_db_path(), constants.get_retriever_model_path())
-    pre_processor = pre_process.OptimizerPreprocessor(None)
-
+    # Pre-processor
     if args.type == 'create-bins':
+        pre_processor = pre_process.OptimizerPreprocessor(None)
         pre_processor.create_bins(args.num_bins)
     elif args.type == 'do-squad':
+        m = Model(constants.get_db_path(), constants.get_retriever_model_path())
+        pre_processor = pre_process.OptimizerPreprocessor(m)
         pre_processor.pre_process_squad(args.path, args.bin_id)
     elif args.type == 'merge-bins':
+        pre_processor = pre_process.OptimizerPreprocessor(None)
         pre_processor.merge_bins(args.num_bins)
+
+    # Neural net
+    elif args.type == 'train':
+        net = OptimizerNet()
+        net.train()
 

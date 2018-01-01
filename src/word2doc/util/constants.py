@@ -29,6 +29,8 @@ OPTIMIZER_DATA_NAME = 'opt_data.npz'
 SQUAD_DIR_NAME = 'squad'
 SQUAD_DEV_NAME = 'dev-v1.1.json'
 SQUAD_TRAIN_NAME = 'train-v1.1.json'
+SQUAD_DEV_QUERIES_NAME = 'dev-v1.1-queries.npy'
+SQUAD_TRAIN_QUERIES_NAME = 'train-v1.1-queries.npy'
 
 # GloVe dir
 GLOVE_DIR_PATH = 'GloVe'
@@ -136,4 +138,12 @@ def get_squad_dev_path():
 
 def get_squad_train_path():
     return os.path.join(get_squad_dir(), SQUAD_TRAIN_NAME)
+
+
+def get_squad_dev_queries_path():
+    return os.path.join(get_squad_dir(), SQUAD_DEV_QUERIES_NAME)
+
+
+def get_squad_train_queries_path():
+    return os.path.join(get_squad_dir(), SQUAD_TRAIN_QUERIES_NAME)
 
