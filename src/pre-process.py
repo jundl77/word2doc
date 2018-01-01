@@ -26,6 +26,8 @@ if __name__ == '__main__':
                         help='path to the data to process')
     parser.add_argument('--bin-id', type=int, default=None,
                         help='Id of the bin to process')
+    parser.add_argument('--num-bins', type=int, default=None,
+                        help='Number of bins')
     parser.add_argument('--num-workers', type=int, default=None,
                         help='Number of CPU processes')
     args = parser.parse_args()
@@ -34,13 +36,13 @@ if __name__ == '__main__':
     init_project.init(args.num_workers)
 
     # Load pre_processor
-    m = Model(constants.get_db_path(), constants.get_retriever_model_path())
-    pre_processor = pre_process.OptimizerPreprocessor(m)
+    # m = Model(constants.get_db_path(), constants.get_retriever_model_path())
+    pre_processor = pre_process.OptimizerPreprocessor(None)
 
     if args.type == 'create-bins':
-        pre_processor.create_bins()
+        pre_processor.create_bins(args.num_bins)
     elif args.type == 'do-squad':
         pre_processor.pre_process_squad(args.path, args.bin_id)
     elif args.type == 'merge-bins':
-        pre_processor.merge_bins()
+        pre_processor.merge_bins(args.num_bins)
 

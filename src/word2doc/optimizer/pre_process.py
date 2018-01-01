@@ -20,13 +20,13 @@ class OptimizerPreprocessor:
     def __exit__(self, type, value, traceback):
         pass
 
-    def create_bins(self):
+    def create_bins(self, num_bins):
         self.logger.info('Load data and split it into files')
 
-        self.__create_bins_squad(constants.get_squad_train_path())
-        self.__create_bins_squad(constants.get_squad_dev_path())
+        self.__create_bins_squad(constants.get_squad_train_path(), num_bins)
+        self.__create_bins_squad(constants.get_squad_dev_path(), num_bins)
 
-    def __create_bins_squad(self, path):
+    def __create_bins_squad(self, path, num_bins):
 
         self.logger.info('Creating bins for ' + path)
 
@@ -42,7 +42,7 @@ class OptimizerPreprocessor:
 
         # Load data
         squad = json.load(open(path))
-        data_split = np.array_split(squad['data'], constants.get_number_workers())
+        data_split = np.array_split(squad['data'], num_bins)
 
         # Save data to bins
         counter = 1
@@ -94,25 +94,23 @@ class OptimizerPreprocessor:
         name = os.path.join(bin_dir_path, str(bin_id) + '-queries.npy')
         np.save(name, queries)
 
-    def merge_bins(self):
-        self.__merge_bins_squad(constants.get_squad_train_path())
-        self.__merge_bins_squad(constants.get_squad_dev_path())
+    def merge_bins(self, num_bins):
+        self.__merge_bins_squad(constants.get_squad_train_path(), num_bins)
+        self.__merge_bins_squad(constants.get_squad_dev_path(), num_bins)
 
-    def __merge_bins_squad(self, path):
+    def __merge_bins_squad(self, path, num_bins):
         # Define path to bin folder
         bin_dir_path = os.path.splitext(path)[0]
 
-        base_dir = os.path.dirname(path)
-        file_name = os.path.splitext(base_dir)[0]
-
         data = {}
         # Load data from bins
-        for i in range(1, constants.get_number_workers()) :
+        for i in range(1, num_bins) :
             bin_path = os.path.join(bin_dir_path, str(i) + '-queries.npy')
             bin_data = np.load(bin_path)
+            squad_dict = np.ndarray.tolist(bin_data)
 
             # Append bin to all data
-            data.update(bin_data)
+            data.update(squad_dict)
 
-        name = os.path.join(base_dir, file_name + '-queries.npy')
+        name = bin_dir_path + '-queries.npy'
         np.save(name, data)
