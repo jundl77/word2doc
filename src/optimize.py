@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import locale
 
 from word2doc.util import constants
 from word2doc.util import logger
@@ -35,6 +36,7 @@ if __name__ == '__main__':
 
     # Init project
     init_project.init(args.num_workers)
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
     # Pre-processor
     if args.type == 'create-bins':

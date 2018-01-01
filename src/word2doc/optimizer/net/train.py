@@ -19,7 +19,7 @@ class OptimizerNet:
         with tf.name_scope("hyper-params"):
             # Parameters
             self.learning_rate = 0.001
-            self.training_epochs = 100
+            self.training_epochs = 1
             self.batch_size = 20
             self.display_step = 1
 
@@ -29,6 +29,13 @@ class OptimizerNet:
             self.n_hidden_3 = 100  # 3rd layer number of neurons
             self.n_input = 20     # 20 values from pre-processing
             self.n_classes = 5    # one of 5 classes
+
+            tf.summary.scalar('learning_rate', self.learning_rate)
+            tf.summary.scalar('epochs', self.training_epochs)
+            tf.summary.scalar('batch_size', self.batch_size)
+            tf.summary.scalar('n_hidden_1', self.n_hidden_1)
+            tf.summary.scalar('n_hidden_1', self.n_hidden_2)
+            tf.summary.scalar('n_hidden_1', self.n_hidden_3)
 
         # tf Graph input
         with tf.name_scope('input'):
@@ -158,7 +165,7 @@ class OptimizerNet:
 
         # Create a summary for tensorboard
         tf.summary.scalar("cost", cost_op)
-        tf.summary.scalar("accuracy", accuracy)
+        accuracy_summary = tf.summary.scalar("accuracy", accuracy)
 
         # Merge all summaries into a single operation
         summary_op = tf.summary.merge_all()
@@ -186,7 +193,7 @@ class OptimizerNet:
                         _, summary_train = sess.run([train_op, summary_op], feed_dict={self.X: batch_x, self.Y: batch_y})
 
                         # Get test accuracy
-                        summary_test = sess.run([summary_op], feed_dict={self.X: test_x, self.Y: test_y})
+                        summary_test = sess.run([accuracy_summary], feed_dict={self.X: test_x, self.Y: test_y})
 
                         # Compute average loss
                         # avg_loss += loss / total_batch
