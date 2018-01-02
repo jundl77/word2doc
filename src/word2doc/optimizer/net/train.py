@@ -19,14 +19,14 @@ class OptimizerNet:
         with tf.name_scope("hyper-params"):
             # Parameters
             self.learning_rate = 0.001
-            self.training_epochs = 1
+            self.training_epochs = 100
             self.batch_size = 20
             self.display_step = 1
 
             # Network Parameters
             self.n_hidden_1 = 100  # 1st layer number of neurons
-            self.n_hidden_2 = 100  # 2nd layer number of neurons
-            self.n_hidden_3 = 100  # 3rd layer number of neurons
+            self.n_hidden_2 = 1000  # 2nd layer number of neurons
+            self.n_hidden_3 = 1000  # 3rd layer number of neurons
             self.n_input = 20     # 20 values from pre-processing
             self.n_classes = 5    # one of 5 classes
 
@@ -41,6 +41,7 @@ class OptimizerNet:
         with tf.name_scope('input'):
             self.X = tf.placeholder(tf.float32, [None, self.n_input])
             self.Y = tf.placeholder(tf.int32, [None, self.n_classes])
+            self.phase = tf.placeholder(tf.bool, name='phase')
 
         # Store layers weight & bias
         with tf.name_scope("weights"):
@@ -119,26 +120,43 @@ class OptimizerNet:
 
         return x, y
 
-    def multilayer_perceptron(self, x):
+    def dense(self, x, num_out, weights, biases, scope):
+        return tf.contrib.layers.fully_connected(x,
+                                                 num_out,
+                                                 activation_fn=None,
+                                                 scope=scope)
+
+    def dense_batch(self, x, num_out, weights, biases, phase, scope):
+        with tf.variable_scope(scope):
+            # Hidden fully connected layer with batch normalization
+            # h1 = tf.add(tf.matmul(x, weights), biases)
+            h1 = tf.contrib.layers.fully_connected(x,
+                                                   num_out,
+                                                   activation_fn=None,
+                                                   scope='dense')
+            h2 = tf.contrib.layers.batch_norm(h1, center=True, scale=True, is_training=phase, scope='bn')
+            return tf.nn.relu(h2, 'relu')
+
+    def multilayer_perceptron(self, x, phase):
         """Create model"""
 
-        # Hidden fully connected layer with 20 neurons
-        layer_1 = tf.add(tf.matmul(x, self.weights['h1']), self.biases['b1'])
+        # Hidden fully connected layer
+        layer_1 = self.dense_batch(x, self.n_hidden_1, self.weights['h1'], self.biases['b1'], phase, 'layer_1')
 
-        # Hidden fully connected layer with 20 neurons
-        layer_2 = tf.add(tf.matmul(layer_1, self.weights['h2']), self.biases['b2'])
+        # Hidden fully connected layer
+        layer_2 = self.dense_batch(layer_1, self.n_hidden_2, self.weights['h2'], self.biases['b2'], phase, 'layer_2')
 
-        # Hidden fully connected layer with 20 neurons
-        layer_3 = tf.add(tf.matmul(layer_2, self.weights['h3']), self.biases['b3'])
+        # Hidden fully connected layer
+        layer_3 = self.dense_batch(layer_2, self.n_hidden_3, self.weights['h3'], self.biases['b3'], phase, 'layer_3')
 
-        # Output fully connected layer with a neuron for each class
-        out_layer = tf.matmul(layer_3, self.weights['out']) + self.biases['out']
+        # Hidden fully connected layer
+        # out_layer = tf.matmul(layer_3, self.weights['out']) + self.biases['out']
 
-        return out_layer
+        return self.dense(layer_3, self.n_classes, self.weights['out'], self.biases['out'], 'out')
 
     def train(self):
         # Construct model
-        logits = self.multilayer_perceptron(self.X)
+        logits = self.multilayer_perceptron(self.X, self.phase)
 
         # Load data
         train_x, train_y = self.load_data(constants.get_squad_train_queries_path())
@@ -149,11 +167,14 @@ class OptimizerNet:
         test_x, test_y = self.scramble_data(test_x, test_y)
 
         # Define network functions
-        with tf.name_scope('cost'):
-            cost_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=self.Y))
+        with tf.name_scope('loss'):
+            loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=self.Y))
 
         with tf.name_scope('train'):
-            train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(cost_op)
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                # Ensures that we execute the update_ops before performing the train_step
+                train_op = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(loss_op)
 
         with tf.name_scope('accuracy'):
             pred = tf.nn.softmax(logits)
@@ -164,7 +185,7 @@ class OptimizerNet:
         init = tf.global_variables_initializer()
 
         # Create a summary for tensorboard
-        tf.summary.scalar("cost", cost_op)
+        tf.summary.scalar("loss", loss_op)
         accuracy_summary = tf.summary.scalar("accuracy", accuracy)
 
         # Merge all summaries into a single operation
@@ -190,13 +211,14 @@ class OptimizerNet:
                         batch_y = train_y[self.batch_size * i:self.batch_size * (i + 1)]
 
                         # Run optimization op (backprop) and cost op (to get loss value)
-                        _, summary_train = sess.run([train_op, summary_op], feed_dict={self.X: batch_x, self.Y: batch_y})
+                        _, summary_train = sess.run([train_op, summary_op], feed_dict={self.X: batch_x,
+                                                                                       self.Y: batch_y,
+                                                                                       self.phase: 1})
 
                         # Get test accuracy
-                        summary_test = sess.run([accuracy_summary], feed_dict={self.X: test_x, self.Y: test_y})
-
-                        # Compute average loss
-                        # avg_loss += loss / total_batch
+                        summary_test = sess.run([accuracy_summary], feed_dict={self.X: test_x,
+                                                                               self.Y: test_y,
+                                                                               self.phase: 0})
 
                         # Update tensorboard
                         train_summary_writer.add_summary(summary_train, epoch * total_batch + i)
@@ -206,15 +228,7 @@ class OptimizerNet:
 
                 # Display logs per epoch step
                 if epoch % self.display_step == 0:
-                    # print("Epoch:", '%04d' % (epoch+1), "cost={:.9f}".format(avg_loss))
                     print("Epoch:", '%04d' % (epoch+1))
 
             print("Optimization Finished!")
-
-            # Test model
-            pred = tf.nn.softmax(logits)  # Apply softmax to logits
-            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(self.Y, 1))
-
-            # Calculate accuracy
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-            print("Accuracy:", accuracy.eval({self.X: test_x, self.Y: test_y}))
+            print("Accuracy:", accuracy.eval({self.X: test_x, self.Y: test_y, self.phase: 0}))
