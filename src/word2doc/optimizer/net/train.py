@@ -1,6 +1,7 @@
 import time
 import random
 import keras
+import prettytable
 import numpy as np
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
@@ -12,13 +13,44 @@ from word2doc.util import constants
 from word2doc.util import logger
 
 
-class TrainKeras:
+class OptimizerNet:
 
     def __init__(self):
         self.logger = logger.get_logger()
 
+        self.hyper_params = {
+            'TRAINING PARAMS': '',
+            'epochs': 20,
+            'batch_size_train': 256,
+            'batch_size_test': 16,
+            'n_input': 20,
+            '': '',
+            'HIDDEN LAYER 1': '',
+            'n_h1': 500,
+            'h1_activation': 'relu',
+            'h1_dropout': 0.4,
+            ' ': '',
+            'HIDDEN LAYER 2': '',
+            'n_h2': 300,
+            'h2_activation': 'relu',
+            'h2_dropout': 0.4,
+            '  ': '',
+            'OUTPUT LAYER': '',
+            'n_classes': 5,
+            'out_activation': 'softmax',
+            
+        } 
+
+    def log_hyper_params(self):
+        table = prettytable.PrettyTable(['Hyper Parameter', 'Value'])
+
+        for key, val in self.hyper_params.items():
+            table.add_row([key, val])
+            
+        self.logger.info(table)
+
     def load_data(self, path):
-        self.logger.info("Load data..")
+        self.logger.info('Load ' + path)
 
         squad = np.load(path)
         squad_dict = np.ndarray.tolist(squad)
@@ -61,7 +93,6 @@ class TrainKeras:
     def scramble_data(self, x, y):
 
         shuffled = list(zip(x, y))
-
         random.shuffle(shuffled)
 
         scrambled = []
@@ -81,33 +112,40 @@ class TrainKeras:
     def model(self):
         start_time = time.time()
         self.logger.info('Compiling Model ... ')
+
         model = Sequential()
-        model.add(Dense(500, input_dim=20))
-        model.add(BatchNormalization())
-        model.add(Activation('relu'))
-        model.add(Dropout(0.4))
 
-        model.add(Dense(300))
-        model.add(Activation('relu'))
+        # Hidden layer 1
+        model.add(Dense(self.hyper_params['n_h1'], input_dim=self.hyper_params['n_input']))
         model.add(BatchNormalization())
-        model.add(Dropout(0.4))
+        model.add(Activation(self.hyper_params['h1_activation']))
+        model.add(Dropout(self.hyper_params['h1_dropout']))
 
-        model.add(Dense(5))
-        model.add(Activation('softmax'))
+        # Hidden layer 2
+        model.add(Dense(self.hyper_params['n_h2']))
+        model.add(BatchNormalization())
+        model.add(Activation(self.hyper_params['h2_activation']))
+        model.add(Dropout(self.hyper_params['h2_dropout']))
+
+        # Output layer
+        model.add(Dense(self.hyper_params['n_classes']))
+        model.add(Activation(self.hyper_params['out_activation']))
 
         rms = RMSprop()
         model.compile(loss='categorical_crossentropy', optimizer=rms, metrics=['accuracy'])
         self.logger.info('Model compield in {0} seconds'.format(time.time() - start_time))
         return model
 
-    def train(self, epochs=20, batch=256):
+    def train(self):
         # Load data
         train_x, train_y = self.load_data(constants.get_squad_train_queries_path())
         test_x, test_y = self.load_data(constants.get_squad_dev_queries_path())
 
         # Scramble data
+        self.logger.info('Scrambling data..')
         train_x, train_y = self.scramble_data(train_x, train_y)
         test_x, test_y = self.scramble_data(test_x, test_y)
+        self.logger.info('Done scrambling data.')
 
         # Set up model
         model = self.model()
@@ -118,14 +156,16 @@ class TrainKeras:
                                                  write_graph=True,
                                                  write_images=True)
         # Train model
-        self.logger.info('Training model...')
+        self.logger.info('Training model with hyper params:')
+        self.log_hyper_params()
+
         model.fit(train_x, train_y,
-                  epochs=epochs,
-                  batch_size=batch,
+                  epochs=self.hyper_params['epochs'],
+                  batch_size=self.hyper_params['batch_size_train'],
                   validation_data=(test_x, test_y),
                   verbose=2,
                   callbacks=[tbCallback])
 
-        score = model.evaluate(test_x, test_y, batch_size=16)
+        score = model.evaluate(test_x, test_y, batch_size=self.hyper_params['batch_size_test'])
 
-        self.logger.info("Network's test score [loss, accuracy]: {0}".format(score))
+        self.logger.info('Score: [loss, accuracy]: {0}'.format(score))

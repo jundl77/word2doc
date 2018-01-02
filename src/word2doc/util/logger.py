@@ -4,14 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+from word2doc.util import constants
+from logging.handlers import TimedRotatingFileHandler
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
-console = logging.StreamHandler()
-console.setFormatter(fmt)
-logger.addHandler(console)
+# Set up logger
+log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+root_logger = logging.getLogger("Rotating Log")
+
+file_handler = TimedRotatingFileHandler("{0}/{1}.log".format(constants.get_logs_dir(), 'word2doc'), when="d", interval=1, backupCount=100)
+file_handler.setFormatter(log_formatter)
+root_logger.addHandler(file_handler)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+root_logger.addHandler(console_handler)
+root_logger.setLevel(logging.INFO)
 
 
 def get_logger():
-    return logger
+    return root_logger
