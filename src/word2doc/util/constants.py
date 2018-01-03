@@ -11,8 +11,7 @@ import os
 PROJECT_ROOT_DIR = ''
 DATA_DIR_NAME = 'data'
 LOGS_DIR_NAME = 'logs'
-TENSORBOARD_TRAIN_NAME = "tf-train"
-TENSORBOARD_DEV_NAME = "tf-dev"
+TENSORBOARD_NAME = 'tensorboard'
 ANALYTICS_FILE_NAME = 'analytics.json'
 N_WORKERS = 1
 
@@ -86,12 +85,8 @@ def get_analytics_path():
     return os.path.join(get_logs_dir(), ANALYTICS_FILE_NAME)
 
 
-def get_tensorboard_train_path():
-    return os.path.join(get_logs_dir(), TENSORBOARD_TRAIN_NAME)
-
-
-def get_tensorboard_dev_path():
-    return os.path.join(get_logs_dir(), TENSORBOARD_DEV_NAME)
+def get_tensorboard_path():
+    return os.path.join(get_logs_dir(), TENSORBOARD_NAME)
 
 
 # ------------------------------------------------------------------------------

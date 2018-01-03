@@ -1,4 +1,5 @@
 import time
+import os
 import random
 import keras
 import prettytable
@@ -19,9 +20,10 @@ class OptimizerNet:
         self.logger = logger.get_logger()
 
         self.hyper_params = {
+            'TIME': '',
             'TRAINING PARAMS': '',
             'epochs': 20,
-            'batch_size_train': 256,
+            'batch_size_train': 16,
             'batch_size_test': 16,
             'n_input': 20,
             '': '',
@@ -41,13 +43,19 @@ class OptimizerNet:
             
         } 
 
-    def log_hyper_params(self):
+    def log_hyper_params(self, id):
+        self.hyper_params['TIME'] = id
         table = prettytable.PrettyTable(['Hyper Parameter', 'Value'])
 
         for key, val in self.hyper_params.items():
             table.add_row([key, val])
             
         self.logger.info(table)
+
+    def create_run_log(self, id):
+        path = os.path.join(constants.get_tensorboard_path(), id)
+        os.makedirs(path)
+        return path
 
     def load_data(self, path):
         self.logger.info('Load ' + path)
@@ -151,13 +159,14 @@ class OptimizerNet:
         model = self.model()
 
         # Set up tensorboard
-        tbCallback = keras.callbacks.TensorBoard(log_dir=constants.get_logs_dir(),
+        id = str(int(round(time.time())))
+        tbCallback = keras.callbacks.TensorBoard(log_dir=self.create_run_log(id),
                                                  histogram_freq=0,
                                                  write_graph=True,
                                                  write_images=True)
         # Train model
         self.logger.info('Training model with hyper params:')
-        self.log_hyper_params()
+        self.log_hyper_params(id)
 
         model.fit(train_x, train_y,
                   epochs=self.hyper_params['epochs'],

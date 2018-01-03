@@ -56,6 +56,10 @@ def init_file_structure():
     if not os.path.exists(constants.get_logs_dir()):
         os.makedirs(constants.get_logs_dir())
 
+    # Create tensorboard folder
+    if not os.path.exists(constants.get_tensorboard_path()):
+        os.makedirs(constants.get_tensorboard_path())
+
 
 # ------------------------------------------------------------------------------
 # Init file structure
