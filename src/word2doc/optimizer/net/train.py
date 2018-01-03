@@ -7,7 +7,6 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.normalization import BatchNormalization
-from keras.optimizers import RMSprop
 
 from tqdm import tqdm
 from word2doc.util import constants
@@ -22,21 +21,28 @@ class OptimizerNet:
         self.hyper_params = {
             'TIME': '',
             'TRAINING PARAMS': '',
-            'epochs': 20,
-            'batch_size_train': 16,
-            'batch_size_test': 16,
+            'loss_func': 'categorical_crossentropy',
+            'optimizer': 'sgd',
+            'epochs': 100,
+            'batch_size_train': 8,
+            'batch_size_test': 8,
             'n_input': 20,
             '': '',
             'HIDDEN LAYER 1': '',
-            'n_h1': 500,
+            'n_h1': 700,
             'h1_activation': 'relu',
             'h1_dropout': 0.4,
             ' ': '',
             'HIDDEN LAYER 2': '',
-            'n_h2': 300,
+            'n_h2': 500,
             'h2_activation': 'relu',
             'h2_dropout': 0.4,
             '  ': '',
+            'HIDDEN LAYER 3': '',
+            'n_h3': 300,
+            'h3_activation': 'relu',
+            'h3_dropout': 0.4,
+            '   ': '',
             'OUTPUT LAYER': '',
             'n_classes': 5,
             'out_activation': 'softmax',
@@ -135,12 +141,17 @@ class OptimizerNet:
         model.add(Activation(self.hyper_params['h2_activation']))
         model.add(Dropout(self.hyper_params['h2_dropout']))
 
+        # Hidden layer 3
+        model.add(Dense(self.hyper_params['n_h3']))
+        model.add(BatchNormalization())
+        model.add(Activation(self.hyper_params['h3_activation']))
+        model.add(Dropout(self.hyper_params['h3_dropout']))
+
         # Output layer
         model.add(Dense(self.hyper_params['n_classes']))
         model.add(Activation(self.hyper_params['out_activation']))
 
-        rms = RMSprop()
-        model.compile(loss='categorical_crossentropy', optimizer=rms, metrics=['accuracy'])
+        model.compile(loss=self.hyper_params['loss_func'], optimizer=self.hyper_params['optimizer'], metrics=['accuracy'])
         self.logger.info('Model compield in {0} seconds'.format(time.time() - start_time))
         return model
 
@@ -152,7 +163,9 @@ class OptimizerNet:
         # Scramble data
         self.logger.info('Scrambling data..')
         train_x, train_y = self.scramble_data(train_x, train_y)
-        test_x, test_y = self.scramble_data(test_x, test_y)
+        # train_x, train_y = np.asarray(train_x), np.asarray(train_y)
+        # test_x, test_y = self.scramble_data(test_x, test_y)
+        test_x, test_y = np.asarray(test_x), np.asarray(test_y)
         self.logger.info('Done scrambling data.')
 
         # Set up model
