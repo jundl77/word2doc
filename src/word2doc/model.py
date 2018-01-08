@@ -36,14 +36,15 @@ class Model:
         return self.analytics
 
     def process(self, query):
-        return self.calculate_rankings(query, 5)
+        return self.calculate_rankings(query, 10)
 
-    def calculate_rankings(self, query, k=5):
+    def calculate_rankings(self, query, k=10):
+        query = self.rake.extract(query.lower())[0]
+
         try:
             doc_names, doc_scores = self.ranker.closest_docs(query, k)
         except RuntimeError:
             return None
-
 
         # Get candidate labels for candidate doc
         e = extractor.LabelExtractor(constants.get_db_path())
@@ -51,37 +52,38 @@ class Model:
         # Filter out more specific docs with reference tree
         doc_names = self.__filter_reference(query, doc_names)
 
+        chosen_doc = None
+
         # Perform sentence embeddings
-        embedding_scores = []
         title_scores = []
         keyword_scores = []
         for i in range(len(doc_names)):
             label = e.extract_label(doc_names[i])
             self.lables[doc_names[i]] = label
 
-            # Embedding label
-            score = self.infersent.compare_sentences(query, label)
-            embedding_scores.append(score)
-
             # Embedding title
             score_title = self.infersent.compare_sentences(query, doc_names[i])
             title_scores.append(score_title)
 
-            # Embedding keywords
-            keywords = self.rake.extract(label.lower())
+            # Embedding top three keywords
+            keywords = self.rake.extract(label.lower())[:3]
             keyword_embeddings = list(map(lambda w: self.infersent.compare_sentences(query, w), keywords))
 
-            # keyword_embeddings = reject_outliers(keyword_embeddings)
             if len(keyword_embeddings) == 0:
                 keyword_scores.append(0)
             else:
                 keyword_scores.append(reduce(lambda x, y: x + y, keyword_embeddings) / len(keyword_embeddings))
 
+            # Preempt search because a title matches
+            if score_title > 0.95:
+                chosen_doc = doc_names[i]
+                break
+
         scores = {}
         for i in range(len(doc_names)):
-            scores[doc_names[i]] = [doc_scores[i], embedding_scores[i], title_scores[i], keyword_scores[i]]
+            scores[doc_names[i]] = [doc_scores[i], title_scores[i], keyword_scores[i]]
 
-        return scores
+        return scores, chosen_doc
 
     def __filter_reference(self, query, doc_names):
         """Filter out more specific docs with reference tree"""
@@ -94,10 +96,4 @@ class Model:
         self.analytics.reference_graph_analytics(doc_names, filtered_docs)
 
         return filtered_docs
-
-    def __reject_outliers(self, data, m = 2.):
-        d = np.abs(data - np.median(data))
-        mdev = np.median(d)
-        s = d/mdev if mdev else 0.
-        return data[s<m]
 

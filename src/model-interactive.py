@@ -36,14 +36,17 @@ def init(db_path, model_path):
 def calculate_rankings(query, k=5):
     global MODEL
 
-    scores = MODEL.calculate_rankings(query, k)
+    scores, doc = MODEL.calculate_rankings(query, k)
     table = prettytable.PrettyTable(
-        ['Doc Id', 'Doc Score', 'Label Embedding Score', 'Title Embedding Score', 'Keyword Embedding Score']
+        ['Doc Id', 'Doc Score', 'Title Embedding Score', 'Keyword Embedding Score']
     )
 
     for t, s in scores.items():
         table.add_row([t, '%.5g' % s[0], s[1], s[2], s[3]])
     print(table)
+
+    if doc is not None:
+        print("Doc retrieved: " + doc)
 
     analytics = MODEL.get_analytics()
     analytics.save_to_file()
@@ -52,7 +55,7 @@ def calculate_rankings(query, k=5):
 
 banner = """
 Interactive TF-IDF Retriever
->> calculate_rankings(question, k=5)
+>> calculate_rankings(question, k=10)
 >> usage()
 """
 
