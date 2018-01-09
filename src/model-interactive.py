@@ -33,7 +33,7 @@ def init(db_path, model_path):
    MODEL = model.Model(db_path, model_path)
 
 
-def calculate_rankings(query, k=5):
+def calculate_rankings(query, k=10):
     global MODEL
 
     scores, doc = MODEL.calculate_rankings(query, k)
@@ -42,10 +42,11 @@ def calculate_rankings(query, k=5):
     )
 
     for t, s in scores.items():
-        table.add_row([t, '%.5g' % s[0], s[1], s[2], s[3]])
+        table.add_row([t, '%.5g' % s[0], s[1], s[2]])
     print(table)
 
     if doc is not None:
+        print("Preempted search because found matching title.")
         print("Doc retrieved: " + doc)
 
     analytics = MODEL.get_analytics()

@@ -39,7 +39,7 @@ class Model:
         return self.calculate_rankings(query, 10)
 
     def calculate_rankings(self, query, k=10):
-        query = self.rake.extract(query.lower())[0]
+        query = self.rake.extract(query.lower())[0]  # Take most relevant part of query, at least for training
 
         try:
             doc_names, doc_scores = self.ranker.closest_docs(query, k)
@@ -80,7 +80,13 @@ class Model:
                 break
 
         scores = {}
-        for i in range(len(doc_names)):
+
+        # Normalize data to zero mean and unit variance
+        doc_scores = self.__normalize_list(doc_scores.tolist())
+        title_scores = self.__normalize_list(title_scores)
+        keyword_scores = self.__normalize_list(keyword_scores)
+
+        for i in range(len(title_scores)):
             scores[doc_names[i]] = [doc_scores[i], title_scores[i], keyword_scores[i]]
 
         return scores, chosen_doc
@@ -96,4 +102,16 @@ class Model:
         self.analytics.reference_graph_analytics(doc_names, filtered_docs)
 
         return filtered_docs
+
+    def __normalize_list(self, l):
+        """Normalize data to 0 mean and unit variance"""
+
+        mean = np.mean(l)
+        var = np.var(l)
+
+        # If variance is 0, set variance to 1 (e.g. list only contains same numbers)
+        if var < 0.001:
+            var = 1
+
+        return list(map(lambda x: (x - mean) / var, l))
 
