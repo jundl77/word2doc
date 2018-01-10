@@ -15,6 +15,10 @@ def init(num_workers):
     init_constants()
     init_file_structure()
     init_sys_path()
+
+    if num_workers is None:
+        num_workers = 1
+
     constants.set_number_workers(num_workers)
 
 

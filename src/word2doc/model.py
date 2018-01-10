@@ -38,13 +38,18 @@ class Model:
     def process(self, query):
         return self.calculate_rankings(query, 10)
 
-    def calculate_rankings(self, query, k=10):
+    def calculate_rankings(self, query, k=10, label=None):
         query = self.rake.extract(query.lower())[0]  # Take most relevant part of query, at least for training
 
         try:
             doc_names, doc_scores = self.ranker.closest_docs(query, k)
         except RuntimeError:
-            return None
+            return None, None
+
+        if label is not None and label not in doc_names:
+            # Label was not among found docs, so for training purposes this is useless
+            return None, None
+
 
         # Get candidate labels for candidate doc
         e = extractor.LabelExtractor(constants.get_db_path())
@@ -76,6 +81,7 @@ class Model:
 
             # Preempt search because a title matches
             if score_title > 0.95:
+                self.analytics.preempted_search()
                 chosen_doc = doc_names[i]
                 break
 

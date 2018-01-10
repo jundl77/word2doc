@@ -53,17 +53,16 @@ class OptimizerPreprocessor:
 
     def pre_process_squad(self, path, bin_id):
 
-        # Bin ids should start with 0, so add 1 (because of slurm queue)
-        #bin_id += 21
-
         # Define path to bin folder
-        bin_dir_path = os.path.splitext(path)[0]
-        bin_path = os.path.join(bin_dir_path, str(bin_id) + '.npy')
+        bin_path = os.path.join(path, str(bin_id) + '.npy')
 
         # Load bin data
         bin_data = np.load(bin_path)
 
         queries = {}
+
+        query_error_count = 0
+        total_queries_processed = 0
 
         self.logger.info('Gathering labels and queries from squad...')
         with tqdm(total=len(bin_data)) as pbar:
@@ -78,20 +77,33 @@ class OptimizerPreprocessor:
                     for qa in qas:
                         question = qa['question']
 
-                        docs = self.model.calculate_rankings(question)
+                        scores, doc = self.model.calculate_rankings(question, label=title)
+                        total_queries_processed += 1
 
-                        # Run through model
-                        if docs is not None:
+                        if doc is not None:
+                            # Preempted
+                            continue
+
+                        if scores is None or title not in scores:
+                            # Label was not retrieved
+                            query_error_count += 1
+                        else:
+                            # Run through model
                             queries[question] = {
                                 'label': title,
-                                'docs': docs
+                                'docs': scores
                             }
 
                 pbar.update()
 
         self.logger.info('Done with bin ' + str(bin_id))
 
-        name = os.path.join(bin_dir_path, str(bin_id) + '-queries.npy')
+        # Update analytics model
+        analytics = self.model.get_analytics()
+        analytics.queries_processed(total_queries_processed, query_error_count)
+        analytics.save_to_file('analytics_bin' + str(bin_id))
+
+        name = os.path.join(path, str(bin_id) + '-queries.npy')
         np.save(name, queries)
 
     def merge_bins(self, num_bins):
