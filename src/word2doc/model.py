@@ -50,7 +50,6 @@ class Model:
             # Label was not among found docs, so for training purposes this is useless
             return None, None
 
-
         # Get candidate labels for candidate doc
         e = extractor.LabelExtractor(constants.get_db_path())
 
@@ -77,7 +76,9 @@ class Model:
             if len(keyword_embeddings) == 0:
                 keyword_scores.append(0)
             else:
-                keyword_scores.append(reduce(lambda x, y: x + y, keyword_embeddings) / len(keyword_embeddings))
+                tuples = zip(keyword_embeddings, [0.43, 0.33, 0.23])
+                tuple_product = list(map(lambda x: x[0] * x[1], tuples))
+                keyword_scores.append(reduce(lambda x, y: x + y, tuple_product))
 
             # Preempt search because a title matches
             if score_title > 0.95:

@@ -42,7 +42,7 @@ class Analytics:
             'pp_query_preemption_count': self.pp_query_preemption_count,
             'n_pp_queries': self.n_pp_queries,
             'n_pp_queries_error': self.n_pp_queries_error,
-            'pp_queries_accuracy': self.n_pp_queries_error
+            'pp_queries_accuracy': self.pp_queries_accuracy
         }
 
         with open(os.path.join(constants.get_logs_dir(), file_name + '.json'), 'w') as fp:
