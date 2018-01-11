@@ -3,10 +3,11 @@ tqdm
 torchvision
 tensorflow
 sklearn
-scipy
-requests
 regex
 rake-nltk
 prettytable
+matplotlib
+keras
+jupyter
+gensim
 bashplotlib
-pexpect
