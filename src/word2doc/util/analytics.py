@@ -21,16 +21,18 @@ class Analytics:
 
         # Calculates for how many queries the label was correctly found using the document retriever
         self.n_pp_queries = -1
-        self.n_pp_queries_error = -1,
+        self.n_pp_queries_error = -1
+        self.n_pp_queries_duplicate = -1
         self.pp_queries_accuracy = -1
 
     def preempted_search(self):
         self.pp_query_preemption_count += 1
 
-    def queries_processed(self, total, n_error):
+    def queries_processed(self, total, n_duplicate, n_error):
         self.n_pp_queries = total
         self.n_pp_queries_error = n_error
-        self.pp_queries_accuracy = float(total - n_error) / float(total)
+        self.n_pp_queries_duplicate = n_duplicate
+        self.pp_queries_accuracy = float(total - n_duplicate - n_error) / float(total - n_duplicate)
 
     def reference_graph_analytics(self, original_docs, filtered_docs):
         self.rg_changes.append(len(original_docs) - len(filtered_docs))
@@ -41,6 +43,7 @@ class Analytics:
             'reference_graph_changes': self.rg_changes,
             'pp_query_preemption_count': self.pp_query_preemption_count,
             'n_pp_queries': self.n_pp_queries,
+            'n_pp_queries_duplicate': self.n_pp_queries_duplicate,
             'n_pp_queries_error': self.n_pp_queries_error,
             'pp_queries_accuracy': self.pp_queries_accuracy
         }

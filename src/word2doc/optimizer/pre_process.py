@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from word2doc.util import constants
 from word2doc.util import logger
+from word2doc.keywords import rake_extractor
 
 
 class OptimizerPreprocessor:
@@ -13,6 +14,7 @@ class OptimizerPreprocessor:
     def __init__(self, model):
         self.model = model
         self.logger = logger.get_logger()
+        self.rake = rake_extractor.RakeExtractor()
 
     def __enter__(self):
         return self
@@ -59,9 +61,11 @@ class OptimizerPreprocessor:
         # Load bin data
         bin_data = np.load(bin_path)
 
-        queries = {}
+        queries = {} # Only the kept queries
+        seen_questions = []
 
         query_error_count = 0
+        query_duplicate_count = 0
         total_queries_processed = 0
 
         self.logger.info('Gathering labels and queries from squad...')
@@ -77,7 +81,18 @@ class OptimizerPreprocessor:
                     for qa in qas:
                         question = qa['question']
 
-                        scores, doc = self.model.calculate_rankings(question, label=title)
+                        # Take most relevant part of query, at least for training
+                        short_question = self.rake.extract(question.lower())[0]
+
+                        # Make sure there are not duplicates (not even in substrings)
+                        res = list(filter(lambda q: q in short_question, seen_questions))
+                        if len(res) > 0:
+                            query_duplicate_count += 1
+                            continue
+
+                        # Process the question
+                        scores, doc = self.model.calculate_rankings(short_question, label=title)
+                        seen_questions += short_question
                         total_queries_processed += 1
 
                         if doc is not None:
@@ -100,7 +115,7 @@ class OptimizerPreprocessor:
 
         # Update analytics model
         analytics = self.model.get_analytics()
-        analytics.queries_processed(total_queries_processed, query_error_count)
+        analytics.queries_processed(total_queries_processed, query_duplicate_count, query_error_count)
         analytics.save_to_file('analytics_bin' + str(bin_id))
 
         name = os.path.join(path, str(bin_id) + '-queries.npy')

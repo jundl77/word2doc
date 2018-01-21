@@ -38,8 +38,7 @@ class Model:
     def process(self, query):
         return self.calculate_rankings(query, 10)
 
-    def calculate_rankings(self, query, k=10, label=None):
-        query = self.rake.extract(query.lower())[0]  # Take most relevant part of query, at least for training
+    def calculate_rankings(self, query, k=10, queries=None, label=None):
 
         try:
             doc_names, doc_scores = self.ranker.closest_docs(query, k)
@@ -111,14 +110,8 @@ class Model:
         return filtered_docs
 
     def __normalize_list(self, l):
-        """Normalize data to 0 mean and unit variance"""
+        """Normalize data to 0 mean and unit variance (calculate z score)"""
 
-        mean = np.mean(l)
-        var = np.var(l)
-
-        # If variance is 0, set variance to 1 (e.g. list only contains same numbers)
-        if var < 0.001:
-            var = 1
-
-        return list(map(lambda x: (x - mean) / var, l))
+        x_np = np.asarray(l)
+        return (x_np - x_np.mean()) / x_np.std()
 
