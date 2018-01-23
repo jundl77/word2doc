@@ -1,4 +1,3 @@
-
 import json
 import os
 import numpy as np
@@ -80,31 +79,42 @@ class OptimizerPreprocessor:
 
                     for qa in qas:
                         question = qa['question']
+                        real_q = question
 
                         # Take most relevant part of query, at least for training
-                        short_question = self.rake.extract(question.lower())[0]
+                        question = self.rake.extract(question.lower())[0]
 
                         # Make sure there are not duplicates (not even in substrings)
-                        res = list(filter(lambda q: q in short_question, seen_questions))
+                        res = list(filter(lambda q: q in question, seen_questions))
                         if len(res) > 0:
                             query_duplicate_count += 1
                             continue
 
                         # Process the question
-                        scores, doc = self.model.calculate_rankings(short_question, label=title)
-                        seen_questions += short_question
+                        scores, doc = self.model.calculate_rankings(question, label=title)
                         total_queries_processed += 1
 
                         if doc is not None:
                             # Preempted
+                            seen_questions.append(question)
                             continue
 
                         if scores is None or title not in scores:
                             # Label was not retrieved
                             query_error_count += 1
                         else:
+                            # Remove any queries that are more specific (current is substring of an existing query)
+                            res = list(filter(lambda q: question in q, queries))
+                            if len(res) > 0:
+                                for q in res:
+                                    query_duplicate_count += 1
+                                    del queries[q]
+
+                            # Mark as seen
+                            seen_questions.append(short_question)
+
                             # Run through model
-                            queries[question] = {
+                            queries[short_question] = {
                                 'label': title,
                                 'docs': scores
                             }

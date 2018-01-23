@@ -38,7 +38,7 @@ class Model:
     def process(self, query):
         return self.calculate_rankings(query, 10)
 
-    def calculate_rankings(self, query, k=10, queries=None, label=None):
+    def calculate_rankings(self, query, k=10, label=None):
 
         try:
             doc_names, doc_scores = self.ranker.closest_docs(query, k)
@@ -88,9 +88,9 @@ class Model:
         scores = {}
 
         # Normalize data to zero mean and unit variance
-        doc_scores = self.__normalize_list(doc_scores.tolist())
-        title_scores = self.__normalize_list(title_scores)
-        keyword_scores = self.__normalize_list(keyword_scores)
+        doc_scores, doc_norm_error_count = self.__normalize_list(doc_scores.tolist())
+        title_scores, title_norm_error_count = self.__normalize_list(title_scores)
+        keyword_scores, keyword_norm_error_count = self.__normalize_list(keyword_scores)
 
         for i in range(len(title_scores)):
             scores[doc_names[i]] = [doc_scores[i], title_scores[i], keyword_scores[i]]
@@ -112,6 +112,17 @@ class Model:
     def __normalize_list(self, l):
         """Normalize data to 0 mean and unit variance (calculate z score)"""
 
-        x_np = np.asarray(l)
-        return (x_np - x_np.mean()) / x_np.std()
+        zero_count = 0
 
+        # Normalize
+        norm_list = np.asarray(l)
+        std = norm_list.std()
+
+        # Std. is 0 -> all values are the same, so they will all be set to 0 (because of subtraction of mean)
+        if std < 0.00001:
+            zero_count += 1
+            norm_list = [float(0)] * len(l)
+        else:
+            norm_list = (norm_list - norm_list.mean()) / std
+
+        return norm_list, zero_count
