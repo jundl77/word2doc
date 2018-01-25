@@ -1,23 +1,22 @@
-import time
 import os
 import random
+import time
+
 import keras
-import prettytable
 import numpy as np
+import prettytable
 import tensorflow as tf
 from keras import optimizers
-from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
-from keras.layers.normalization import BatchNormalization
-
+from keras.models import Sequential
 from tqdm import tqdm
+
+from word2doc.optimizer.tensorboard import XTensorBoard
 from word2doc.util import constants
 from word2doc.util import logger
-from word2doc.optimizer.tensorboard import TensorBoard
 
 
 class OptimizerNet:
-
     def __init__(self):
         self.logger = logger.get_logger()
 
@@ -31,25 +30,45 @@ class OptimizerNet:
             'batch_size_test': 8,
             'n_input': 20,
             '': '',
+            'LEARNING RATE': '',
+            '          ': '',
             'HIDDEN LAYER 1': '',
-            'n_h1': 70,
+            'n_h1': 1300,
             'h1_activation': 'relu',
             'h1_dropout': 0.4,
             ' ': '',
             'HIDDEN LAYER 2': '',
-            'n_h2': 50,
+            'n_h2': 1100,
             'h2_activation': 'relu',
             'h2_dropout': 0.4,
             '  ': '',
+            '   ': '',
             'HIDDEN LAYER 3': '',
-            'n_h3': 30,
+            'n_h3': 900,
             'h3_activation': 'relu',
             'h3_dropout': 0.4,
-            '   ': '',
+            '    ': '',
+            '     ': '',
+            'HIDDEN LAYER 4': '',
+            'n_h4': 700,
+            'h4_activation': 'relu',
+            'h4_dropout': 0.4,
+            '      ': '',
+            '       ': '',
+            'HIDDEN LAYER 5': '',
+            'n_h5': 500,
+            'h5_activation': 'relu',
+            'h5_dropout': 0.4,
+            '        ': '',
+            'HIDDEN LAYER 6': '',
+            'n_h6': 300,
+            'h6_activation': 'relu',
+            'h6_dropout': 0.4,
+            '         ': '',
             'OUTPUT LAYER': '',
             'n_classes': 5,
             'out_activation': 'softmax',
-        } 
+        }
 
     def log_hyper_params(self, id):
         self.hyper_params['TIME'] = id
@@ -57,7 +76,7 @@ class OptimizerNet:
 
         for key, val in self.hyper_params.items():
             table.add_row([key, val])
-            
+
         self.logger.info(table)
 
     def create_run_log(self, id):
@@ -108,11 +127,9 @@ class OptimizerNet:
 
                 pbar.update()
 
-        print(error_counter)
         return scores, labels
 
     def scramble_data(self, x, y, num_docs):
-
         shuffled = list(zip(x, y))
         random.shuffle(shuffled)
 
@@ -174,29 +191,41 @@ class OptimizerNet:
 
         # Hidden layer 1
         model.add(Dense(self.hyper_params['n_h1'], input_dim=self.hyper_params['n_input']))
-        model.add(BatchNormalization())
         model.add(Activation(self.hyper_params['h1_activation']))
         model.add(Dropout(self.hyper_params['h1_dropout']))
 
         # Hidden layer 2
         model.add(Dense(self.hyper_params['n_h2']))
-        model.add(BatchNormalization())
         model.add(Activation(self.hyper_params['h2_activation']))
         model.add(Dropout(self.hyper_params['h2_dropout']))
 
         # Hidden layer 3
         model.add(Dense(self.hyper_params['n_h3']))
-        model.add(BatchNormalization())
         model.add(Activation(self.hyper_params['h3_activation']))
         model.add(Dropout(self.hyper_params['h3_dropout']))
+
+        # Hidden layer 4
+        model.add(Dense(self.hyper_params['n_h4']))
+        model.add(Activation(self.hyper_params['h4_activation']))
+        model.add(Dropout(self.hyper_params['h4_dropout']))
+
+        # Hidden layer 5
+        model.add(Dense(self.hyper_params['n_h5']))
+        model.add(Activation(self.hyper_params['h5_activation']))
+        model.add(Dropout(self.hyper_params['h5_dropout']))
+
+        # Hidden layer 6
+        model.add(Dense(self.hyper_params['n_h6']))
+        model.add(Activation(self.hyper_params['h6_activation']))
+        model.add(Dropout(self.hyper_params['h6_dropout']))
 
         # Output layer
         model.add(Dense(self.hyper_params['n_classes']))
         model.add(Activation(self.hyper_params['out_activation']))
 
-        opt = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+        opt = optimizers.SGD(lr=0.12, decay=1e-2, momentum=0.9, nesterov=True)
         model.compile(loss=self.hyper_params['loss_func'], optimizer=opt, metrics=['accuracy'])
-        self.logger.info('Model compield in {0} seconds'.format(time.time() - start_time))
+        self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
         return model
 
     def train(self):
@@ -204,11 +233,26 @@ class OptimizerNet:
         train_x, train_y = self.load_data(constants.get_squad_train_queries_path())
         test_x, test_y = self.load_data(constants.get_squad_dev_queries_path())
 
+        self.logger.info('Label distribution of training data (before shuffle):')
+        self.logger.info(self.label_distribution(train_y))
+
+        # data_gen = DataGenerator()
+        # self.logger.info('Generating random data')
+        # train_x = data_gen.generate_data(40000, 5)
+        # test_x = data_gen.generate_data(6000, 5)
+        # self.logger.info('Done.')
+
         # Normalize data
         self.logger.info('Normalizing data for 0 mean and unit variance..')
         train_x = self.normalize_data(train_x, 5)
         test_x = self.normalize_data(test_x, 5)
         self.logger.info('Done normalizing.')
+
+        # Generate labels (for generated data only)
+        # self.logger.info('Generating labels for random data')
+        # train_y = data_gen.generate_labels(train_x, 5)
+        # test_y = data_gen.generate_labels(test_x, 5)
+        # self.logger.info('Done.')
 
         # Scramble data
         self.logger.info('Scrambling data..')
@@ -218,12 +262,18 @@ class OptimizerNet:
         test_x, test_y = np.asarray(test_x), np.asarray(test_y)
         self.logger.info('Done scrambling data.')
 
+        # Do a brief sanity check of data
+        self.logger.info('Label distribution of training data (after shuffle):')
+        self.logger.info(self.label_distribution(train_y))
+        self.logger.info('Label distribution of test data (no shuffle):')
+        self.logger.info(self.label_distribution(test_y))
+
         # Set up model
         model = self.model()
 
         # Set up tensorboard
         id = str(int(round(time.time())))
-        tbCallback = TensorBoard(log_dir=self.create_run_log(id),
+        tbCallback = XTensorBoard(log_dir=self.create_run_log(id),
                                  histogram_freq=0,
                                  write_graph=True,
                                  write_images=True,
@@ -244,11 +294,21 @@ class OptimizerNet:
 
         self.logger.info('Score: [loss, accuracy]: {0}'.format(score))
 
+    def label_distribution(self, label_data):
+        freq = [0] * len(label_data[0])
+
+        for label in label_data:
+            freq[int(np.argmax(label))] += 1
+
+        s = sum(freq)
+        return list(map(lambda i: float(i) / float(s), freq))
+
     def custom_log_func(self, tensorboard, epoch, logs=None):
 
         # Add learning rate
         optimizer = tensorboard.model.optimizer
-        lr = keras.backend.eval(tf.cast(optimizer.lr, tf.float64) * (1.0 / (1.0 + tf.cast(optimizer.iterations, tf.float64) * tf.cast(optimizer.decay, tf.float64))))
+        lr = keras.backend.eval(tf.cast(optimizer.lr, tf.float64) * (
+        1.0 / (1.0 + tf.cast(optimizer.iterations, tf.float64) * tf.cast(optimizer.decay, tf.float64))))
 
         return {
             "learning_rate": lr
