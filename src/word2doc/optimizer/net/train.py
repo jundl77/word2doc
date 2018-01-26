@@ -26,7 +26,7 @@ class OptimizerNet:
             'TRAINING PARAMS': '',
             'loss_func': 'categorical_crossentropy',
             'optimizer': 'sgd',
-            'epochs': 100,
+            'epochs': 1,
             'batch_size_train': 8,
             'batch_size_test': 8,
             'n_input': 20,
@@ -313,7 +313,15 @@ class OptimizerNet:
                   verbose=2,
                   callbacks=[tbCallback])
 
+        # model_part = keras.Model(input=[model.layers[0]], output=[model.layers[6]])
+        # model_part.compile(loss='categorical_crossentropy', optimizer='sgd')
+        # model_part.fit(X_train, y_train, nb_epoch=2)
+
+        self.logger.info(model.layers[5].output)
+
         score = model.evaluate(test_x, test_y, batch_size=self.hyper_params['batch_size_test'])
+        # wo_ap = self.intermediate_output(model, 5, test_x[0:1])
+        # w_ap = model.predict(test_x[0:1])
 
         self.logger.info('Score: [loss, accuracy]: {0}'.format(score))
 
@@ -350,6 +358,10 @@ class OptimizerNet:
                 s_y[4].append(elem[1])
 
         return s_x, s_y
+
+    def intermediate_output(self, model, layer_num, data):
+        intermediate_layer_model = keras.Model(inputs=model.input, outputs=model.layers[layer_num].output)
+        return intermediate_layer_model.predict(data)
 
     def avg_data(self, x, num_docs):
         avg_data = []
