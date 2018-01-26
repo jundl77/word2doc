@@ -12,7 +12,7 @@ class LoggableTensorBoard(TensorBoard):
                  embeddings_freq=0,
                  embeddings_layer_names=None,
                  embeddings_metadata=None,
-                 custom_logs_func=None):
+                 custom_log_func=None):
         TensorBoard.__init__(self,
                              log_dir=log_dir,
                              histogram_freq=histogram_freq,
@@ -24,13 +24,13 @@ class LoggableTensorBoard(TensorBoard):
                              embeddings_layer_names=embeddings_layer_names,
                              embeddings_metadata=embeddings_metadata)
 
-        self.custom_logs_func = custom_logs_func
+        self.custom_log_func = custom_log_func
 
     def on_epoch_end(self, epoch, logs=None):
         """Called at the end of each epoch. Modified to add custom log values so that they also
         show up on TensorBoard"""
-        if self.custom_logs_func is not None:
-            logs.update(self.custom_logs_func(self, epoch, logs))
+        if self.custom_log_func is not None:
+            logs.update(self.custom_log_func(self, epoch, logs))
 
         super(LoggableTensorBoard, self).on_epoch_end(epoch, logs)
 

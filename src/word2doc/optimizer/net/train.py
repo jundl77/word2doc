@@ -8,10 +8,11 @@ import prettytable
 import tensorflow as tf
 from keras import optimizers
 from keras.layers.core import Dense, Dropout, Activation
+from word2doc.optimizer.net.APrioriLayer import APrioriLayer
 from keras.models import Sequential
 from tqdm import tqdm
 
-from word2doc.optimizer.tensorboard import XTensorBoard
+from word2doc.optimizer.tensorboard import LoggableTensorBoard
 from word2doc.util import constants
 from word2doc.util import logger
 
@@ -33,7 +34,7 @@ class OptimizerNet:
             'LEARNING RATE': '',
             '          ': '',
             'HIDDEN LAYER 1': '',
-            'n_h1': 1300,
+            'n_h1': 100,
             'h1_activation': 'relu',
             'h1_dropout': 0.4,
             ' ': '',
@@ -61,7 +62,7 @@ class OptimizerNet:
             'h5_dropout': 0.4,
             '        ': '',
             'HIDDEN LAYER 6': '',
-            'n_h6': 300,
+            'n_h6': 70,
             'h6_activation': 'relu',
             'h6_dropout': 0.4,
             '         ': '',
@@ -183,7 +184,7 @@ class OptimizerNet:
 
         return norm_data
 
-    def model(self):
+    def model(self, aprioris):
         start_time = time.time()
         self.logger.info('Compiling Model ... ')
 
@@ -192,36 +193,38 @@ class OptimizerNet:
         # Hidden layer 1
         model.add(Dense(self.hyper_params['n_h1'], input_dim=self.hyper_params['n_input']))
         model.add(Activation(self.hyper_params['h1_activation']))
-        model.add(Dropout(self.hyper_params['h1_dropout']))
+        #model.add(Dropout(self.hyper_params['h1_dropout']))
 
-        # Hidden layer 2
-        model.add(Dense(self.hyper_params['n_h2']))
-        model.add(Activation(self.hyper_params['h2_activation']))
-        model.add(Dropout(self.hyper_params['h2_dropout']))
-
-        # Hidden layer 3
-        model.add(Dense(self.hyper_params['n_h3']))
-        model.add(Activation(self.hyper_params['h3_activation']))
-        model.add(Dropout(self.hyper_params['h3_dropout']))
-
-        # Hidden layer 4
-        model.add(Dense(self.hyper_params['n_h4']))
-        model.add(Activation(self.hyper_params['h4_activation']))
-        model.add(Dropout(self.hyper_params['h4_dropout']))
-
-        # Hidden layer 5
-        model.add(Dense(self.hyper_params['n_h5']))
-        model.add(Activation(self.hyper_params['h5_activation']))
-        model.add(Dropout(self.hyper_params['h5_dropout']))
+        # # Hidden layer 2
+        # model.add(Dense(self.hyper_params['n_h2']))
+        # model.add(Activation(self.hyper_params['h2_activation']))
+        # model.add(Dropout(self.hyper_params['h2_dropout']))
+        #
+        # # Hidden layer 3
+        # model.add(Dense(self.hyper_params['n_h3']))
+        # model.add(Activation(self.hyper_params['h3_activation']))
+        # model.add(Dropout(self.hyper_params['h3_dropout']))
+        #
+        # # Hidden layer 4
+        # model.add(Dense(self.hyper_params['n_h4']))
+        # model.add(Activation(self.hyper_params['h4_activation']))
+        # model.add(Dropout(self.hyper_params['h4_dropout']))
+        #
+        # # Hidden layer 5
+        # model.add(Dense(self.hyper_params['n_h5']))
+        # model.add(Activation(self.hyper_params['h5_activation']))
+        # model.add(Dropout(self.hyper_params['h5_dropout']))
 
         # Hidden layer 6
         model.add(Dense(self.hyper_params['n_h6']))
         model.add(Activation(self.hyper_params['h6_activation']))
-        model.add(Dropout(self.hyper_params['h6_dropout']))
+        #model.add(Dropout(self.hyper_params['h6_dropout']))
 
         # Output layer
         model.add(Dense(self.hyper_params['n_classes']))
         model.add(Activation(self.hyper_params['out_activation']))
+
+        model.add(APrioriLayer(aprioris))
 
         opt = optimizers.SGD(lr=0.12, decay=1e-2, momentum=0.9, nesterov=True)
         model.compile(loss=self.hyper_params['loss_func'], optimizer=opt, metrics=['accuracy'])
@@ -254,6 +257,25 @@ class OptimizerNet:
         # test_y = data_gen.generate_labels(test_x, 5)
         # self.logger.info('Done.')
 
+        # succ, err, acc = self.check_data(train_x, train_y, 5)
+        s_tr_x, s_tr_y = self.sort_data(train_x, train_y)
+        s_te_x, s_te_y = self.sort_data(test_x, test_y)
+        # a = self.avg_data(s_t_x[0], 5)
+        # b = self.avg_data(s_t_x[1], 5)
+        # c = self.avg_data(s_t_x[2], 5)
+        # d = self.avg_data(s_t_x[3], 5)
+        # e = self.avg_data(s_t_x[4], 5)
+
+        del s_tr_x[0]
+        del s_tr_y[0]
+        del s_te_x[0]
+        del s_te_y[0]
+
+        train_x = [item for sublist in s_tr_x for item in sublist]
+        train_y = [item for sublist in s_tr_y for item in sublist]
+        test_x = [item for sublist in s_te_x for item in sublist]
+        test_y = [item for sublist in s_te_y for item in sublist]
+
         # Scramble data
         self.logger.info('Scrambling data..')
         train_x, train_y = self.scramble_data(train_x, train_y, 5)
@@ -266,18 +288,19 @@ class OptimizerNet:
         self.logger.info('Label distribution of training data (after shuffle):')
         self.logger.info(self.label_distribution(train_y))
         self.logger.info('Label distribution of test data (no shuffle):')
-        self.logger.info(self.label_distribution(test_y))
+        aprioris = self.label_distribution(test_y)
+        self.logger.info(aprioris)
 
         # Set up model
-        model = self.model()
+        model = self.model(aprioris)
 
         # Set up tensorboard
         id = str(int(round(time.time())))
-        tbCallback = XTensorBoard(log_dir=self.create_run_log(id),
-                                 histogram_freq=0,
-                                 write_graph=True,
-                                 write_images=True,
-                                 custom_log_func=self.custom_log_func)
+        tbCallback = LoggableTensorBoard(log_dir=self.create_run_log(id),
+                                         histogram_freq=0,
+                                         write_graph=True,
+                                         write_images=True,
+                                         custom_log_func=self.custom_log_func)
 
         # Train model
         self.logger.info('Training model with hyper params:')
@@ -303,12 +326,89 @@ class OptimizerNet:
         s = sum(freq)
         return list(map(lambda i: float(i) / float(s), freq))
 
+    def sort_data(self, x, y):
+        data = list(zip(x, y))
+        s_x = [[], [], [], [], []]
+        s_y = [[], [], [], [], []]
+
+        for elem in data:
+            index = int(np.argmax(elem[1]))
+            if index == 0:
+                s_x[0].append(elem[0])
+                s_y[0].append(elem[1])
+            elif index == 1:
+                s_x[1].append(elem[0])
+                s_y[1].append(elem[1])
+            elif index == 2:
+                s_x[2].append(elem[0])
+                s_y[2].append(elem[1])
+            elif index == 3:
+                s_x[3].append(elem[0])
+                s_y[3].append(elem[1])
+            elif index == 4:
+                s_x[4].append(elem[0])
+                s_y[4].append(elem[1])
+
+        return s_x, s_y
+
+    def avg_data(self, x, num_docs):
+        avg_data = []
+
+        # Go through every input for net
+        for elem in np.asarray(x):
+
+            # Dissect input into values for each document, so we get an array
+            train = list(map(lambda b: np.ndarray.tolist(b), np.array_split(elem, num_docs)))
+
+            l_2 = [0, 0, 0, 0, 0]
+
+            # Normalize columns in array
+            for j in range(0, len(train[0])):
+                mean_list = list()
+
+                # Extract column into mean_list
+                for i in range(0, len(train)):
+                    mean_list.append(train[i][j])
+
+                # Calculate mean
+                mean_list = np.asarray(mean_list)
+                l_2[j] = mean_list.max() - mean_list.min()
+
+            # Flatten list again and add to general result
+            avg_data.append(l_2)
+
+        return avg_data
+
+    def check_data(self, x, y, num_docs):
+        data = list(zip(x, y))
+
+        succ = 0
+        err = 0
+
+        # Go through every input for net
+        for elem in np.asarray(data):
+
+            # Dissect input into values for each document, so we get an array
+            train = list(map(lambda b: np.ndarray.tolist(b), np.array_split(elem[0], num_docs)))
+
+            l = []
+            # Normalize columns in array
+            for i in range(0, len(train)):
+                l.append(train[i][0])
+
+            if elem[1][np.argmax(l)] == 1:
+                succ += 1
+            else:
+                err += 1
+
+        return succ, err, (float(succ) / float(succ + err))
+
     def custom_log_func(self, tensorboard, epoch, logs=None):
 
         # Add learning rate
         optimizer = tensorboard.model.optimizer
         lr = keras.backend.eval(tf.cast(optimizer.lr, tf.float64) * (
-        1.0 / (1.0 + tf.cast(optimizer.iterations, tf.float64) * tf.cast(optimizer.decay, tf.float64))))
+            1.0 / (1.0 + tf.cast(optimizer.iterations, tf.float64) * tf.cast(optimizer.decay, tf.float64))))
 
         return {
             "learning_rate": lr
