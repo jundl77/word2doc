@@ -181,8 +181,31 @@ class Word2DocPreprocessor:
     def create_bins(self, num_bins):
         self.logger.info('Load data and split it into files')
 
-        self.__create_bins_squad(constants.get_squad_train_path(), num_bins)
-        self.__create_bins_squad(constants.get_squad_dev_path(), num_bins)
+        self.__create_bins(constants.get_word2doc_dir(), num_bins)
+
+    def __create_bins(self, path, num_bins):
+
+        doc_titles = self.doc_db.get_doc_ids()
+
+        self.logger.info('Creating bins for ' + path)
+
+        # Create word2doc folder
+        if not os.path.exists(constants.get_word2doc_dir()):
+            os.makedirs(constants.get_word2doc_dir())
+        else:
+            self.logger.info('Bins already exist, stopping.')
+            return
+
+        # Load data
+        squad = json.load(open(path))
+        data_split = np.array_split(squad['data'], num_bins)
+
+        # Save data to bins
+        counter = 1
+        for b in data_split:
+            name = os.path.join(base_path, str(counter) + '.npy')
+            np.save(name, b)
+            counter += 1
 
     def pre_process(self):
 
@@ -213,6 +236,8 @@ class Word2DocPreprocessor:
                 pivots = pivots + self.rake.extract(topic_sent)[:2]
                 pivots = pivots + self.rake.extract(rest_par)[:6 - len(pivots)]
 
+                pivots = self.__remove_duplicates(pivots)
+
                 # Encode pivots as word embeddings using infersent
                 pivots_embedding = list(map(lambda p: self.infersent.encode(p), pivots))
 
@@ -229,4 +254,22 @@ class Word2DocPreprocessor:
         name = os.path.join(constants.get_data_dir(), 'word2doc-pre_process.npy')
         np.save(name, data)
         self.logger.info("Saved to file.")
+
+    def __remove_duplicates(self, list):
+        output = []
+        seen = set()
+        for value in list:
+            clean_value = ''.join(e for e in value.lower() if e.isalnum() or e == ' ')
+
+            if clean_value not in seen:
+                output.append(value)
+                seen.add(clean_value)
+
+        return output
+
+    def merge_bins(self, num_bins):
+        self.logger.info('Merging bins..')
+        self.__merge_bins_squad(constants.get_squad_train_path(), num_bins)
+        self.__merge_bins_squad(constants.get_squad_dev_path(), num_bins)
+
 

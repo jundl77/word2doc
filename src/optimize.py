@@ -31,7 +31,7 @@ def handle_model_type(args):
             pre_processor.merge_bins(args.num_bins)
 
         # Neural net
-        if args.model_type == 'squad':
+        elif args.model_action == 'train':
             net = OptimizerNet()
             net.train()
 
@@ -46,7 +46,7 @@ def handle_model_type(args):
             pre_processor.merge_bins(args.num_bins)
 
         # Neural net
-        if args.model_type == 'squad':
+        elif args.model_action == 'train':
             net = OptimizerNet()
             net.train()
 
@@ -57,9 +57,9 @@ def handle_model_type(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('model-type', type=str, default=None,
+    parser.add_argument('model_type', type=str, default=None,
                         help='squad, word2doc')
-    parser.add_argument('model-action', type=str, default=None,
+    parser.add_argument('model_action', type=str, default=None,
                         help='create-bins, pre-process, merge-bins, train')
     parser.add_argument('--path', type=str, default=None,
                         help='path to the data to process')

@@ -32,6 +32,9 @@ SQUAD_TRAIN_NAME = 'train-v1.1.json'
 SQUAD_DEV_QUERIES_NAME = 'dev-v1.1-queries.npy'
 SQUAD_TRAIN_QUERIES_NAME = 'train-v1.1-queries.npy'
 
+# Word2Doc data
+WORD2DOC_DIR_NAME = 'word2doc'
+
 # GloVe dir
 GLOVE_DIR_PATH = 'GloVe'
 GLOVE_840B_300D_NAME = 'glove.840B.300d.txt'
@@ -147,3 +150,6 @@ def get_squad_dev_queries_path():
 def get_squad_train_queries_path():
     return os.path.join(get_squad_dir(), SQUAD_TRAIN_QUERIES_NAME)
 
+
+def get_word2doc_dir():
+    return os.path.join(get_data_dir(), WORD2DOC_DIR_NAME)
