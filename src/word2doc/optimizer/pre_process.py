@@ -4,6 +4,7 @@ import numpy as np
 
 from tqdm import tqdm
 from random import shuffle
+from random import randint
 from word2doc.util import constants
 from word2doc.util import logger
 from word2doc.keywords import rake_extractor
@@ -217,13 +218,16 @@ class Word2DocPreprocessor:
         data = list()
         invalid_count = 0
         freq_error_count = 0
-        index = 0
+        counter = 0
 
         self.logger.info('Creating pivot embeddings for docs...')
         with tqdm(total=len(doc_titles)) as pbar:
             for doc in tqdm(doc_titles):
 
-                if index >= 5000:
+                index = randint(0, len(doc_titles) - 1)
+                doc = doc_titles[index]
+
+                if counter >= 5000:
                     break
 
                 clean_title = ''.join(e for e in doc.lower() if e.isalnum() or e == ' ')
@@ -231,7 +235,7 @@ class Word2DocPreprocessor:
                 # Make sure we don't have a title that has only special chars
                 if clean_title == '':
                     invalid_count += 1
-                    index += 1
+                    counter += 1
                     continue
 
                 # Get intro paragraph of document
@@ -252,15 +256,19 @@ class Word2DocPreprocessor:
                 pivots_embedding = list(map(lambda p: self.infersent.encode(p), pivots))
 
                 # Get closest docs
-                doc_names, doc_scores = self.ranker.closest_docs(doc, 10)
-                doc_window = list(map(lambda d: self.__safe_index(doc_titles, d), doc_names))
+                num_docs = 10
+                try:
+                    doc_names, doc_scores = self.ranker.closest_docs(doc, num_docs)
+                    doc_window = list(map(lambda d: self.__safe_index(doc_titles, d), doc_names))
 
-                # Make sure correct doc is always there
-                if index not in doc_window:
-                    freq_error_count += 1
-                    doc_window[len(doc_window) - 1] = index
+                    # Make sure correct doc is always there
+                    if index not in doc_window:
+                        freq_error_count += 1
+                        doc_window[len(doc_window) - 1] = index
 
-                shuffle(doc_window)
+                    shuffle(doc_window)
+                except RuntimeError:
+                    doc_window = [-1] * num_docs
 
                 # Append word embeddings to data. Index describes correct document id (index 0 -> doc 0)
                 data.append({
@@ -270,13 +278,13 @@ class Word2DocPreprocessor:
                     'doc_window': doc_window
                 })
 
-                index += 1
+                counter += 1
                 pbar.update()
 
         self.logger.info("Invalid count: " + str(invalid_count))
 
         # Update analytics model
-        self.analytics.docs_processed(index, freq_error_count, invalid_count)
+        self.analytics.docs_processed(counter, freq_error_count, invalid_count)
         self.analytics.save_to_file('word2doc_analytics_bin' + str(bin_id))
 
         # Save to file
