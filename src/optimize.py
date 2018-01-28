@@ -41,7 +41,7 @@ def handle_model_type(args):
         if args.model_action == 'create-bins':
             pre_processor.create_bins(args.num_bins)
         elif args.model_action == 'pre-process':
-            pre_processor.pre_process()
+            pre_processor.pre_process(args.bin_id)
         elif args.model_action == 'merge-bins':
             pre_processor.merge_bins(args.num_bins)
 
