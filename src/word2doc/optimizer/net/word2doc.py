@@ -17,7 +17,7 @@ from word2doc.util import constants
 from word2doc.util import logger
 
 
-class OptimizerNet:
+class Word2Doc:
     def __init__(self):
         self.logger = logger.get_logger()
 
@@ -29,43 +29,15 @@ class OptimizerNet:
             'epochs': 10,
             'batch_size_train': 8,
             'batch_size_test': 8,
-            'n_input': 20,
+            'n_input': 4096,
             '': '',
             'LEARNING RATE': '',
-            '          ': '',
+            ' ': '',
             'HIDDEN LAYER 1': '',
-            'n_h1': 700,
+            'n_h1': 300,
             'h1_activation': 'relu',
             'h1_dropout': 0.4,
-            ' ': '',
-            'HIDDEN LAYER 2': '',
-            'n_h2': 500,
-            'h2_activation': 'relu',
-            'h2_dropout': 0.4,
             '  ': '',
-            '   ': '',
-            'HIDDEN LAYER 3': '',
-            'n_h3': 300,
-            'h3_activation': 'relu',
-            'h3_dropout': 0.4,
-            '    ': '',
-            '     ': '',
-            'HIDDEN LAYER 4': '',
-            'n_h4': 700,
-            'h4_activation': 'relu',
-            'h4_dropout': 0.4,
-            '      ': '',
-            '       ': '',
-            'HIDDEN LAYER 5': '',
-            'n_h5': 500,
-            'h5_activation': 'relu',
-            'h5_dropout': 0.4,
-            '        ': '',
-            'HIDDEN LAYER 6': '',
-            'n_h6': 70,
-            'h6_activation': 'relu',
-            'h6_dropout': 0.4,
-            '         ': '',
             'OUTPUT LAYER': '',
             'n_classes': 5,
             'out_activation': 'softmax',
@@ -204,21 +176,6 @@ class OptimizerNet:
         model.add(Dense(self.hyper_params['n_h3']))
         model.add(Activation(self.hyper_params['h3_activation']))
         #model.add(Dropout(self.hyper_params['h3_dropout']))
-        #
-        # # Hidden layer 4
-        # model.add(Dense(self.hyper_params['n_h4']))
-        # model.add(Activation(self.hyper_params['h4_activation']))
-        # model.add(Dropout(self.hyper_params['h4_dropout']))
-        #
-        # # Hidden layer 5
-        # model.add(Dense(self.hyper_params['n_h5']))
-        # model.add(Activation(self.hyper_params['h5_activation']))
-        # model.add(Dropout(self.hyper_params['h5_dropout']))
-
-        # # Hidden layer 6
-        # model.add(Dense(self.hyper_params['n_h6']))
-        # model.add(Activation(self.hyper_params['h6_activation']))
-        # #model.add(Dropout(self.hyper_params['h6_dropout']))
 
         # Output layer
         model.add(Dense(self.hyper_params['n_classes']))
@@ -424,3 +381,4 @@ class OptimizerNet:
         return {
             "learning_rate": lr
         }
+

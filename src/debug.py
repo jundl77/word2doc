@@ -4,17 +4,22 @@ from word2doc.util import init_project
 from word2doc.model import Model
 from word2doc.references import reference_graph_builder
 from word2doc.embeddings import infersent
-from word2doc.optimizer.net.train_keras import TrainKeras
+from word2doc.optimizer.net.train import OptimizerNet
 
 init_project.init(1)
 
 
 def debug_optimizer_preprocessor():
     m = Model(constants.get_db_path(), constants.get_retriever_model_path())
-    pp = pre_process.OptimizerPreprocessor(m)
+    pp = pre_process.SquadPreprocessor(m)
 
     m.get_analytics().save_to_file()
     print(pp)
+
+
+def debug_word2doc_preprocessor():
+    pre_processor = pre_process.Word2DocPreprocessor(None)
+    pre_processor.pre_process()
 
 
 def debug_references():
@@ -29,11 +34,19 @@ def debug_references():
 
 
 def debug_net():
-    net = TrainKeras()
+    net = OptimizerNet()
     net.train()
 
 
-debug_net()
+def debug_infersent():
+    embedding = infersent.get_infersent()
+    embedding.encode("this")
+    embedding.visualize("this")
+
+
+
+# debug_infersent()
+debug_word2doc_preprocessor()
 
 
 

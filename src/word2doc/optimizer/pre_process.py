@@ -6,9 +6,12 @@ from tqdm import tqdm
 from word2doc.util import constants
 from word2doc.util import logger
 from word2doc.keywords import rake_extractor
+from word2doc.retriever.doc_db import DocDB
+from word2doc.labels.extractor import LabelExtractor
+from word2doc.embeddings import infersent
 
 
-class OptimizerPreprocessor:
+class SquadPreprocessor:
 
     def __init__(self, model):
         self.model = model
@@ -52,7 +55,7 @@ class OptimizerPreprocessor:
             np.save(name, b)
             counter += 1
 
-    def pre_process_squad(self, path, bin_id):
+    def pre_process(self, path, bin_id):
 
         # Define path to bin folder
         bin_path = os.path.join(path, str(bin_id) + '.npy')
@@ -111,10 +114,10 @@ class OptimizerPreprocessor:
                                     del queries[q]
 
                             # Mark as seen
-                            seen_questions.append(short_question)
+                            seen_questions.append(question)
 
                             # Run through model
-                            queries[short_question] = {
+                            queries[question] = {
                                 'label': title,
                                 'docs': scores
                             }
@@ -158,3 +161,72 @@ class OptimizerPreprocessor:
         self.logger.info('Saving to ' + name)
         np.save(name, data)
         self.logger.info('Saved.')
+
+
+class Word2DocPreprocessor:
+
+    def __init__(self):
+        self.doc_db = DocDB(constants.get_db_path())
+        self.logger = logger.get_logger()
+        self.rake = rake_extractor.RakeExtractor()
+        self.extractor = LabelExtractor(constants.get_db_path())
+        self.infersent = infersent.get_infersent()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+    def create_bins(self, num_bins):
+        self.logger.info('Load data and split it into files')
+
+        self.__create_bins_squad(constants.get_squad_train_path(), num_bins)
+        self.__create_bins_squad(constants.get_squad_dev_path(), num_bins)
+
+    def pre_process(self):
+
+        doc_titles = self.doc_db.get_doc_ids()
+
+        data = list()
+        error_count = 0
+
+        self.logger.info('Creating pivot embeddings for docs...')
+        with tqdm(total=len(doc_titles)) as pbar:
+            for doc in tqdm(doc_titles):
+                clean_title = ''.join(e for e in doc.lower() if e.isalnum() or e == ' ')
+
+                # Make sure we don't have a title that has only special chars
+                if clean_title == '':
+                    error_count += 1
+                    continue
+
+                # Get intro paragraph of document
+                intro_par = self.extractor.extract_label(doc)
+                sentences = intro_par.split('.')
+                topic_sent = sentences[0]
+                rest_par = '.'.join(sentences[1:])
+
+                # Get up to to 6 keywords from doc, including title. These will be the 'context' words around which the
+                # actual document will pivot
+                pivots = [doc]
+                pivots = pivots + self.rake.extract(topic_sent)[:2]
+                pivots = pivots + self.rake.extract(rest_par)[:6 - len(pivots)]
+
+                # Encode pivots as word embeddings using infersent
+                pivots_embedding = list(map(lambda p: self.infersent.encode(p), pivots))
+
+                # Append word embeddings to data. Index describes correct document id (index 0 -> doc 0)
+                data.append({
+                    'doc_id': doc,
+                    'pivot_embeddings': pivots_embedding
+                })
+
+                pbar.update()
+
+        # Save to file
+        self.logger.info("Done creating pivot embeddings, saving to file..")
+        name = os.path.join(constants.get_data_dir(), 'word2doc-pre_process.npy')
+        np.save(name, data)
+        self.logger.info("Saved to file.")
+

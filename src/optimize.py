@@ -16,14 +16,51 @@ from word2doc.optimizer.net.train import OptimizerNet
 logger = logger.get_logger()
 
 
+def handle_model_type(args):
+    if args.model_type == 'squad':
+        # Pre-processor
+        if args.model_action == 'create-bins':
+            pre_processor = pre_process.SquadPreprocessor(None)
+            pre_processor.create_bins(args.num_bins)
+        elif args.model_action == 'pre-process':
+            m = Model(constants.get_db_path(), constants.get_retriever_model_path())
+            pre_processor = pre_process.SquadPreprocessor(m)
+            pre_processor.pre_process(args.path, args.bin_id)
+        elif args.model_action == 'merge-bins':
+            pre_processor = pre_process.SquadPreprocessor(None)
+            pre_processor.merge_bins(args.num_bins)
+
+        # Neural net
+        if args.model_type == 'squad':
+            net = OptimizerNet()
+            net.train()
+
+    elif args.model_type == 'word2doc':
+        # Pre-processor
+        pre_processor = pre_process.Word2DocPreprocessor()
+        if args.model_action == 'create-bins':
+            pre_processor.create_bins(args.num_bins)
+        elif args.model_action == 'pre-process':
+            pre_processor.pre_process()
+        elif args.model_action == 'merge-bins':
+            pre_processor.merge_bins(args.num_bins)
+
+        # Neural net
+        if args.model_type == 'squad':
+            net = OptimizerNet()
+            net.train()
+
+
 # ------------------------------------------------------------------------------
 # Data pipeline that builds the processes the data for the retriever.
 # ------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('type', type=str, default=None,
-                        help='create-bins, do-squad, merge-bins')
+    parser.add_argument('model-type', type=str, default=None,
+                        help='squad, word2doc')
+    parser.add_argument('model-action', type=str, default=None,
+                        help='create-bins, pre-process, merge-bins, train')
     parser.add_argument('--path', type=str, default=None,
                         help='path to the data to process')
     parser.add_argument('--bin-id', type=int, default=None,
@@ -38,20 +75,7 @@ if __name__ == '__main__':
     init_project.init(args.num_workers)
     locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
-    # Pre-processor
-    if args.type == 'create-bins':
-        pre_processor = pre_process.OptimizerPreprocessor(None)
-        pre_processor.create_bins(args.num_bins)
-    elif args.type == 'do-squad':
-        m = Model(constants.get_db_path(), constants.get_retriever_model_path())
-        pre_processor = pre_process.OptimizerPreprocessor(m)
-        pre_processor.pre_process_squad(args.path, args.bin_id)
-    elif args.type == 'merge-bins':
-        pre_processor = pre_process.OptimizerPreprocessor(None)
-        pre_processor.merge_bins(args.num_bins)
+    handle_model_type(args)
 
-    # Neural net
-    elif args.type == 'train':
-        net = OptimizerNet()
-        net.train()
+
 
