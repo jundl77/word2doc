@@ -12,6 +12,7 @@ from word2doc.util import init_project
 from word2doc.optimizer import pre_process
 from word2doc.model import Model
 from word2doc.optimizer.net.train import OptimizerNet
+from word2doc.optimizer.net.word2doc import Word2Doc
 
 logger = logger.get_logger()
 
@@ -47,7 +48,7 @@ def handle_model_type(args):
 
         # Neural net
         elif args.model_action == 'train':
-            net = OptimizerNet()
+            net = Word2Doc()
             net.train()
 
 

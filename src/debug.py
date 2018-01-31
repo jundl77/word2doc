@@ -5,6 +5,7 @@ from word2doc.model import Model
 from word2doc.references import reference_graph_builder
 from word2doc.embeddings import infersent
 from word2doc.optimizer.net.train import OptimizerNet
+from word2doc.optimizer.net.word2doc import Word2Doc
 
 init_project.init(1)
 
@@ -19,7 +20,7 @@ def debug_optimizer_preprocessor():
 
 def debug_word2doc_preprocessor():
     pre_processor = pre_process.Word2DocPreprocessor(None)
-    pre_processor.pre_process()
+    pre_processor.pre_process(1)
 
 
 def debug_references():
@@ -38,6 +39,11 @@ def debug_net():
     net.train()
 
 
+def debug_word2doc_net():
+    net = Word2Doc()
+    net.train()
+
+
 def debug_infersent():
     embedding = infersent.get_infersent()
     embedding.encode("this")
@@ -46,7 +52,8 @@ def debug_infersent():
 
 
 # debug_infersent()
-debug_word2doc_preprocessor()
+# debug_word2doc_preprocessor()
+debug_word2doc_net()
 
 
 
