@@ -41,7 +41,9 @@ def debug_net():
 
 def debug_word2doc_net():
     net = Word2Doc()
-    print(net.predict([[-1] * 4096]))
+    # net.train()
+    net.eval()
+    # net.predict([[-1] * 4096])
 
 
 def debug_infersent():

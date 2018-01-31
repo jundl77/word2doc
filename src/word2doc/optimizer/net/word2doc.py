@@ -26,6 +26,8 @@ class Word2Doc:
             'batch_size': 1,
             'n_input': 4096,
             'n_neg_sample': 100,
+            'EVALUATION PARAMS': '',
+            'eval_fraction': 0.15,
             '': '',
             'LEARNING RATE': '',
             ' ': '',
@@ -99,6 +101,10 @@ class Word2Doc:
 
         return x, y, c
 
+    def set_num_batches(self, embeddings):
+        batches = np.array_split(embeddings, int(len(embeddings) / self.hyper_params['batch_size']))
+        self.n_batches = len(batches)
+
     def get_batches(self, embeddings, target):
         data = list(zip(embeddings, target))
 
@@ -125,27 +131,26 @@ class Word2Doc:
                 labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
 
             # Output Layer
-            with tf.name_scope("softmax_weights"):
+            with tf.variable_scope("softmax_weights"):
                 softmax_w = tf.Variable(tf.truncated_normal((n_docs, n_input)))
-            with tf.name_scope("softmax_biases"):
+            with tf.variable_scope("softmax_biases"):
                 softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
 
             self.saver = tf.train.Saver({'weights': softmax_b, 'biases': softmax_w})
-
-            with tf.name_scope("loss"):
-                loss = tf.nn.sampled_softmax_loss(
-                    weights=softmax_w,
-                    biases=softmax_b,
-                    labels=labels,
-                    inputs=inputs,
-                    num_sampled=self.hyper_params['n_neg_sample'],
-                    num_classes=n_docs)
-                tf.summary.scalar('train_loss', loss[0])
 
             op = None
 
             # Train model
             if mode == "train":
+                with tf.name_scope("loss"):
+                    loss = tf.nn.sampled_softmax_loss(
+                        weights=softmax_w,
+                        biases=softmax_b,
+                        labels=labels,
+                        inputs=inputs,
+                        num_sampled=self.hyper_params['n_neg_sample'],
+                        num_classes=n_docs)
+                    tf.summary.scalar('train_loss', loss[0])
                 with tf.name_scope("cost"):
                     cost = tf.reduce_mean(loss)
                     tf.summary.scalar("cost", cost)
@@ -156,8 +161,10 @@ class Word2Doc:
             # Eval model
             if mode == "eval":
                 with tf.name_scope('val_loss'):
-                    logits = tf.matmul(inputs, tf.transpose(softmax_w))
-                    logits = tf.nn.bias_add(logits, softmax_b)
+                    with tf.variable_scope("softmax_weights", reuse=True):
+                        logits = tf.matmul(inputs, tf.transpose(softmax_w))
+                    with tf.variable_scope("softmax_biases", reuse=True):
+                        logits = tf.nn.bias_add(logits, softmax_b)
                     labels_one_hot = tf.one_hot(labels, self.hyper_params['n_classes'])
                     val_loss = tf.nn.softmax_cross_entropy_with_logits(labels=labels_one_hot, logits=logits)
                     tf.summary.scalar('val_loss', val_loss[0])
@@ -169,8 +176,10 @@ class Word2Doc:
 
             # Predict
             if mode == "predict":
-                logits = tf.matmul(inputs, tf.transpose(softmax_w))
-                logits = tf.nn.bias_add(logits, softmax_b)
+                with tf.variable_scope("softmax_weights", reuse=True):
+                    logits = tf.matmul(inputs, tf.transpose(softmax_w))
+                with tf.variable_scope("softmax_biases", reuse=True):
+                    logits = tf.nn.bias_add(logits, softmax_b)
                 pred = tf.argmax(logits, 1)
                 op = pred
 
@@ -197,6 +206,7 @@ class Word2Doc:
 
         # Set up model
         model = self.model("train")
+        model_eval = self.model("eval")
         model_id = str(int(round(time.time())))
 
         self.logger.info('Training model with hyper params:')
@@ -207,9 +217,7 @@ class Word2Doc:
         labels = model['labels']
         op = model['op']
         summary_opt = model['summary']
-
-        with train_graph.as_default():
-            saver = tf.train.Saver()
+        eval_summary_opt = model_eval['summary']
 
         with tf.Session(graph=train_graph) as sess:
             sess.run(tf.global_variables_initializer())
@@ -222,7 +230,6 @@ class Word2Doc:
             for epoch in range(1, self.hyper_params['epochs'] + 1):
 
                 batches = self.get_batches(embeddings, target)
-
                 self.logger.info("Epoch " + str(epoch) + "/" + str(self.hyper_params['epochs']))
 
                 counter = 0
@@ -231,14 +238,18 @@ class Word2Doc:
                         feed = {inputs: batch[0], labels: batch[1]}
                         summary, _ = sess.run([summary_opt, op], feed_dict=feed)
 
-                        # Update TensorBoard
+                        # Update train TensorBoard
                         writer.add_summary(summary, epoch * self.n_batches + counter)
 
                         # Update state
                         counter += 1
                         pbar.update()
-                        break
-                break
+
+                        # if counter % 1000 == 0:
+                        #     summary = sess.run([eval_summary_opt], feed_dict=feed)
+                        #
+                        #     # Update eval TensorBoard
+                        #     writer.add_summary(summary, epoch * self.n_batches + counter)
 
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model"))
 
@@ -253,43 +264,46 @@ class Word2Doc:
 
         # Set up model
         model = self.model("eval")
-        model_id = str(int(round(time.time())))
+        model_id = str(int(round(time.time()))) + "_eval"
 
-        self.logger.info('Training model with hyper params:')
+        self.logger.info('Evaluating model..')
         self.log_hyper_params(model_id)
 
         train_graph = model['graph']
         inputs = model['inputs']
         labels = model['labels']
-        op = model['op']
         summary_opt = model['summary']
 
         with tf.Session(graph=train_graph) as sess:
-            sess.run(tf.global_variables_initializer())
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model"))
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
 
-            self.logger.info("Starting training..")
+            self.set_num_batches(embeddings)
+            batches = self.get_batches(embeddings, target)
+            n_eval = int(self.n_batches * self.hyper_params['eval_fraction'])
 
-            for epoch in range(1, self.hyper_params['epochs'] + 1):
+            self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
+                             str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
 
-                batches = self.get_batches(embeddings, target)
+            counter = 0
+            with tqdm(total=n_eval) as pbar:
+                for batch in tqdm(batches):
 
-                self.logger.info("Epoch " + str(epoch) + "/" + str(self.hyper_params['epochs']))
+                    # Only do X% of data
+                    if counter >= n_eval:
+                        break
 
-                counter = 0
-                with tqdm(total=self.n_batches) as pbar:
-                    for batch in tqdm(batches):
-                        feed = {inputs: batch[0], labels: batch[1]}
-                        summary, _ = sess.run([summary_opt, op], feed_dict=feed)
+                    feed = {inputs: batch[0], labels: batch[1]}
+                    summary = sess.run(summary_opt, feed_dict=feed)
 
-                        # Update TensorBoard
-                        writer.add_summary(summary, epoch * self.n_batches + counter)
+                    # Update TensorBoard
+                    writer.add_summary(summary, self.n_batches + counter)
 
-                        # Update state
-                        counter += 1
-                        pbar.update()
+                    # Update state
+                    counter += 1
+                    pbar.update()
 
     def predict(self, x):
         model = self.model('predict')
@@ -299,7 +313,7 @@ class Word2Doc:
         pred_op = model['op']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model.json"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model"))
 
             feed = {inputs: x}
             return sess.run([pred_op], feed_dict=feed)
