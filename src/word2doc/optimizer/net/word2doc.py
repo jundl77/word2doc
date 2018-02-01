@@ -22,8 +22,8 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 1,
-            'batch_size': 1,
+            'epochs': 10,
+            'batch_size': 8,
             'n_input': 4096,
             'n_neg_sample': 100,
             'EVALUATION PARAMS': '',
@@ -139,6 +139,8 @@ class Word2Doc:
             self.saver = tf.train.Saver({'weights': softmax_b, 'biases': softmax_w})
 
             op = None
+            val_loss = None
+            val_acc = None
 
             # Train model
             if mode == "train":
@@ -170,7 +172,8 @@ class Word2Doc:
                     tf.summary.scalar('val_loss', val_loss[0])
 
                 with tf.name_scope('val_acc'):
-                    correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
+                    labels_flat = tf.map_fn(lambda l: l[0], labels)
+                    correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
                     val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                     tf.summary.scalar('val_acc', val_acc)
 
@@ -192,12 +195,14 @@ class Word2Doc:
             'inputs': inputs,
             'labels': labels,
             'op': op,
+            'val_loss': val_loss[0],
+            'val_acc': val_acc,
             'summary': summary
         }
 
     def train(self):
         # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '1-wpp.npy'))
+        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
 
         # Shuffle data
         self.logger.info('Shuffling data..')
@@ -251,11 +256,11 @@ class Word2Doc:
                         #     # Update eval TensorBoard
                         #     writer.add_summary(summary, epoch * self.n_batches + counter)
 
-            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model"))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200"))
 
     def eval(self):
         # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '1-wpp.npy'))
+        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
 
         # Shuffle data
         self.logger.info('Shuffling data..')
@@ -272,10 +277,12 @@ class Word2Doc:
         train_graph = model['graph']
         inputs = model['inputs']
         labels = model['labels']
+        acc = model['val_acc']
+        loss = model['val_loss']
         summary_opt = model['summary']
 
         with tf.Session(graph=train_graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200"))
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
@@ -287,6 +294,9 @@ class Word2Doc:
             self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
                              str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
 
+            total_acc = 0
+            total_loss = 0
+
             counter = 0
             with tqdm(total=n_eval) as pbar:
                 for batch in tqdm(batches):
@@ -296,14 +306,22 @@ class Word2Doc:
                         break
 
                     feed = {inputs: batch[0], labels: batch[1]}
-                    summary = sess.run(summary_opt, feed_dict=feed)
+                    summary, l, a = sess.run([summary_opt, loss, acc], feed_dict=feed)
 
                     # Update TensorBoard
                     writer.add_summary(summary, self.n_batches + counter)
 
                     # Update state
+                    total_loss += l
+                    total_acc += a
                     counter += 1
                     pbar.update()
+
+            total_loss = total_loss / counter
+            total_acc = total_acc / counter
+
+            # Print results
+            self.logger.info("Loss: " + str(total_loss) + " -- Accuracy: " + str(total_acc))
 
     def predict(self, x):
         model = self.model('predict')
