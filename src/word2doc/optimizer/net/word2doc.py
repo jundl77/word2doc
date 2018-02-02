@@ -37,7 +37,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 5312646,
+            'n_classes': 200,
             'out_activation': 'softmax',
         }
 
@@ -91,9 +91,17 @@ class Word2Doc:
 
         return np.asarray(ctx)
 
-    def normalize_context(self, ctx, labels):
-        max_label = max(labels)
-        return list(map(lambda c: int((c * self.hyper_params['n_classes']) / max_label), ctx))
+    def normalize_context(self, ctx):
+        max_label = max(list(map(lambda x: max(x), ctx)))
+
+        ctx = list(ctx)
+
+        i = 0
+        for context in ctx:
+            ctx[i] = list(map(lambda c: int((c * self.hyper_params['n_classes']) / max_label), context))
+            i += 1
+
+        return ctx
 
     def negative_samples(self, data, doc_context, num):
         negative_samples = []
@@ -153,8 +161,7 @@ class Word2Doc:
 
             # Context embeddings
             doc_embeddings = tf.get_variable("doc_embeddings", [n_docs, n_embedding], dtype=tf.float32)
-            embedded_docs = tf.cast(tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context),
-                                   dtype=tf.float32)
+            embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
             concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
@@ -243,6 +250,8 @@ class Word2Doc:
         self.logger.info('Shuffling data..')
         embeddings, context, target = self.shuffle_data(embeddings, context, target)
         self.logger.info('Done shuffling data.')
+
+        context = self.normalize_context(context)
 
         # Set up model
         model = self.model("train")
