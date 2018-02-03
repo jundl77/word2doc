@@ -14,7 +14,6 @@ from word2doc.util import logger
 class Word2Doc:
     def __init__(self):
         self.logger = logger.get_logger()
-        self.n_batches = -1
         self.saver = None
 
         self.hyper_params = {
@@ -37,7 +36,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 200,
+            'n_classes': 5000,
             'out_activation': 'softmax',
         }
 
@@ -97,8 +96,16 @@ class Word2Doc:
         ctx = list(ctx)
 
         i = 0
+        mapping = {}
         for context in ctx:
-            ctx[i] = list(map(lambda c: int((c * self.hyper_params['n_classes']) / max_label), context))
+            for num in context:
+                if num not in mapping:
+                    mapping[num] = i
+                    i += 1
+
+        i = 0
+        for context in ctx:
+            ctx[i] = list(map(lambda n: mapping[n], context))
             i += 1
 
         return ctx
@@ -122,15 +129,14 @@ class Word2Doc:
 
         return x, y, c
 
-    def set_num_batches(self, embeddings):
+    def get_num_batches(self, embeddings):
         batches = np.array_split(embeddings, int(len(embeddings) / self.hyper_params['batch_size']))
-        self.n_batches = len(batches)
+        return len(batches)
 
     def get_batches(self, embeddings, context, target):
         data = list(zip(embeddings, context, target))
 
         batches = np.array_split(data, int(len(embeddings) / self.hyper_params['batch_size']))
-        self.n_batches = len(batches)
 
         for batch in batches:
             x, c, y = zip(*batch)
@@ -138,7 +144,7 @@ class Word2Doc:
 
     def model(self, mode):
         start_time = time.time()
-        self.logger.info("Compiling train model ... ")
+        self.logger.info("Compiling " + mode + " model ... ")
 
         n_input = self.hyper_params['n_input']
         n_context = self.hyper_params['n_context_docs']
@@ -160,12 +166,12 @@ class Word2Doc:
             embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [n_docs, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
             concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
-            embb_dim = n_input * n_context
+            embb_dim = n_embedding * (n_context + 1)
             concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
 
             # Merge layer
@@ -244,14 +250,14 @@ class Word2Doc:
 
     def train(self):
         # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
+        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '1-wpp.npy'))
+
+        context = self.normalize_context(context)
 
         # Shuffle data
         self.logger.info('Shuffling data..')
         embeddings, context, target = self.shuffle_data(embeddings, context, target)
         self.logger.info('Done shuffling data.')
-
-        context = self.normalize_context(context)
 
         # Set up model
         model = self.model("train")
@@ -283,13 +289,14 @@ class Word2Doc:
                 self.logger.info("Epoch " + str(epoch) + "/" + str(self.hyper_params['epochs']))
 
                 counter = 0
-                with tqdm(total=self.n_batches) as pbar:
+                num_batches = self.get_num_batches(embeddings)
+                with tqdm(total=num_batches) as pbar:
                     for batch in tqdm(batches):
                         feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
                         summary, _ = sess.run([summary_opt, op], feed_dict=feed)
 
                         # Update train TensorBoard
-                        writer.add_summary(summary, epoch * self.n_batches + counter)
+                        writer.add_summary(summary, epoch * num_batches + counter)
 
                         # Update state
                         counter += 1
@@ -301,11 +308,13 @@ class Word2Doc:
                         #     # Update eval TensorBoard
                         #     writer.add_summary(summary, epoch * self.n_batches + counter)
 
-            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_2l_relu"))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx"))
 
     def eval(self):
         # Load data
         target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '1-wpp.npy'))
+
+        context = self.normalize_context(context)
 
         # Shuffle data
         self.logger.info('Shuffling data..')
@@ -321,20 +330,21 @@ class Word2Doc:
 
         train_graph = model['graph']
         inputs = model['inputs']
+        context_pl = model['context']
         labels = model['labels']
         acc = model['val_acc']
         loss = model['val_loss']
         summary_opt = model['summary']
 
         with tf.Session(graph=train_graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_2l_relu"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx"))
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
 
-            self.set_num_batches(embeddings)
-            batches = self.get_batches(embeddings, target)
-            n_eval = int(self.n_batches * self.hyper_params['eval_fraction'])
+            num_batches = self.get_num_batches(embeddings)
+            batches = self.get_batches(embeddings, context, target)
+            n_eval = int(num_batches * self.hyper_params['eval_fraction'])
 
             self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
                              str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
@@ -350,11 +360,11 @@ class Word2Doc:
                     if counter >= n_eval:
                         break
 
-                    feed = {inputs: batch[0], labels: batch[1]}
+                    feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
                     summary, l, a = sess.run([summary_opt, loss, acc], feed_dict=feed)
 
                     # Update TensorBoard
-                    writer.add_summary(summary, self.n_batches + counter)
+                    writer.add_summary(summary, num_batches + counter)
 
                     # Update state
                     total_loss += l
