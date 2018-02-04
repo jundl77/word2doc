@@ -50,18 +50,17 @@ class Word2DocTest:
         succ_counter = 0
         err_counter = 0
         total_counter = 0
-        log = dict()
+        log = list()
 
         _, _, old_context, titles = self.word2doc.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
-        while total_counter < 100:
+        while total_counter < 200:
             # Choose random document
             index = randint(0, len(titles) - 1)
             doc = titles[index]
 
             print("Run no. " + str(total_counter))
-            print("Document: " + doc)
-
+            print(u' '.join(("Document: ", doc)).encode('utf-8'))
             intro_par = self.extractor.extract_label(doc)
             print("Intro paragraph:")
             print(intro_par)
@@ -81,29 +80,44 @@ class Word2DocTest:
                 answer = input("Is the response correct? (y\\n)")
 
                 prompt = False
+                correct = False
                 while not prompt:
                     if answer == "y":
                         succ_counter += 1
                         print("Saved success.")
+                        correct = True
                         prompt = True
                     elif answer == "n":
                         err_counter += 1
                         print("Saved error.")
+                        correct = False
                         prompt = True
                     else:
                         print("Wrong input, try again (y\\n)")
             else:
                 err_counter += 1
+                correct = False
                 self.logger.info("Saved error.")
 
 
-            log += {
+            log.append({
                 "Tested document": doc,
-                "User keyword": keyword
-            }
+                "User keyword": keyword,
+                "Correct": correct
+            })
             total_counter += 1
 
         acc = float(succ_counter) / float(total_counter)
+        log.append({
+            "Total docs tested": total_counter,
+            "Number of correct docs:": succ_counter,
+            "Number of incorrect docs": err_counter,
+            "Accuracy": acc
+        })
+
+        with open(os.path.join(constants.get_logs_dir(), 'word2doc_test_1' + '.json'), 'w') as fp:
+            json.dump(log, fp, sort_keys=True, indent=4)
+
         self.logger.info("Accuracy over 200 randomly chosen documents: " + str(acc))
 
     def eval(self, keyword, old_context, titles):
@@ -120,7 +134,7 @@ class Word2DocTest:
         pred = self.word2doc.predict([embb], [ctx])
 
         if pred[0][0] in titles:
-            self.logger.info("Closest document: " + titles[pred[0][0]])
+            self.logger.info(u' '.join(("Closest document: ", titles[pred[0][0]])).encode('utf-8'))
             return True
         else:
             self.logger.info("Document not found.")

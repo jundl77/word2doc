@@ -40,6 +40,8 @@ class Word2Doc:
             'out_activation': 'softmax',
         }
 
+        self.predict_model = self.model("predict")
+
     def log_hyper_params(self, id):
         self.hyper_params['TIME'] = id
         table = prettytable.PrettyTable(['Hyper Parameter', 'Value'])
@@ -388,7 +390,7 @@ class Word2Doc:
             self.logger.info("Loss: " + str(total_loss) + " -- Accuracy: " + str(total_acc))
 
     def predict(self, x, c):
-        model = self.model('predict')
+        model = self.predict_model
 
         graph = model['graph']
         inputs = model['inputs']
