@@ -60,6 +60,9 @@ class Word2DocTest:
             doc = titles[index]
 
             print("Run no. " + str(total_counter))
+            if total_counter > 0:
+                acc = float(succ_counter) / float(total_counter)
+                print("Accuracy: " + str(acc))
             print(u' '.join(("Document: ", doc)).encode('utf-8'))
             intro_par = self.extractor.extract_label(doc)
             print("Intro paragraph:")
