@@ -91,8 +91,6 @@ class Word2Doc:
         return np.asarray(ctx)
 
     def normalize_context(self, ctx):
-        max_label = max(list(map(lambda x: max(x), ctx)))
-
         ctx = list(ctx)
 
         i = 0
@@ -159,23 +157,34 @@ class Word2Doc:
                 inputs = tf.placeholder(tf.float32, shape=(None, n_input), name='inputs')
             with tf.name_scope('context'):
                 context = tf.placeholder(tf.int64, shape=(None, n_context), name='contexts')
-            with tf.name_scope('labels'):
-                labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
+
+            labels = None
+            if mode is not "predict":
+                with tf.name_scope('labels'):
+                    labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
 
             # Input embedding
             embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
+            if mode == "train":
+                embedded_input = tf.nn.dropout(embedded_input, 0.3)
 
             # Context embeddings
             doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
+            if mode == "train":
+                embedded_docs = tf.nn.dropout(embedded_docs, 0.3)
 
             # Contact layers
             concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
             embb_dim = n_embedding * (n_context + 1)
             concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
+            if mode == "train":
+                concat_embb = tf.nn.dropout(concat_embb, 0.3)
 
             # Merge layer
             merged_layer = tf.layers.dense(concat_embb, n_embedding, activation=tf.nn.relu, use_bias=True)
+            if mode == "train":
+                merged_layer = tf.nn.dropout(merged_layer, 0.3)
 
             # Output layer
             with tf.variable_scope("softmax_weights"):
@@ -250,7 +259,7 @@ class Word2Doc:
 
     def train(self):
         # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '1-wpp.npy'))
+        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
         context = self.normalize_context(context)
 
@@ -308,11 +317,11 @@ class Word2Doc:
                         #     # Update eval TensorBoard
                         #     writer.add_summary(summary, epoch * self.n_batches + counter)
 
-            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx"))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_100e_10ctx_dropout"))
 
     def eval(self):
         # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '1-wpp.npy'))
+        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
         context = self.normalize_context(context)
 
@@ -337,7 +346,7 @@ class Word2Doc:
         summary_opt = model['summary']
 
         with tf.Session(graph=train_graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_100e_10ctx_dropout"))
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
@@ -378,16 +387,17 @@ class Word2Doc:
             # Print results
             self.logger.info("Loss: " + str(total_loss) + " -- Accuracy: " + str(total_acc))
 
-    def predict(self, x):
+    def predict(self, x, c):
         model = self.model('predict')
 
         graph = model['graph']
         inputs = model['inputs']
+        context_pl = model['context']
         pred_op = model['op']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_100e_10ctx_dropout"))
 
-            feed = {inputs: x}
+            feed = {inputs: x, context_pl: c}
             return sess.run([pred_op], feed_dict=feed)
 

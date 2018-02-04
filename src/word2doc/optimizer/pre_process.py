@@ -262,9 +262,9 @@ class Word2DocPreprocessor:
                     doc_window = list(map(lambda d: self.__safe_index(doc_titles, d), doc_names))
 
                     # Make sure correct doc is always there
-                    # if index not in doc_window:
-                    #     freq_error_count += 1
-                    #     doc_window[len(doc_window) - 1] = index
+                    if index not in doc_window:
+                        freq_error_count += 1
+                        # doc_window[len(doc_window) - 1] = index
 
                     shuffle(doc_window)
                 except RuntimeError:
