@@ -50,6 +50,7 @@ class Word2DocTest:
         succ_counter = 0
         err_counter = 0
         total_counter = 0
+        test_data = list()
         log = list()
 
         _, _, old_context, titles = self.word2doc.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
@@ -74,7 +75,7 @@ class Word2DocTest:
 
             keyword = input("Create a keyword:\n")
             self.logger.info("Evaluating " + keyword + "..")
-            res = self.eval(keyword, old_context, titles)
+            res, data = self.eval(keyword, old_context, titles)
 
             if res is None:
                 continue
@@ -102,10 +103,18 @@ class Word2DocTest:
                 correct = False
                 self.logger.info("Saved error.")
 
+            test_data.append({
+                'doc_index': index,
+                'doc_title': doc,
+                'query': data['keyword'],
+                'pivot_embeddings': data['pivot_embedding'],
+                'doc_window': data['doc_window']
+            })
 
             log.append({
                 "Tested document": doc,
                 "User keyword": keyword,
+                "Number of context docs removed": data['n_docs_rm'],
                 "Correct": correct
             })
             total_counter += 1
@@ -118,7 +127,12 @@ class Word2DocTest:
             "Accuracy": acc
         })
 
-        with open(os.path.join(constants.get_logs_dir(), 'word2doc_test_1' + '.json'), 'w') as fp:
+        # Save test data
+        name = os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy')
+        np.save(name, test_data)
+
+        # Save log
+        with open(os.path.join(constants.get_logs_dir(), 'word2doc_test_3' + '.json'), 'w') as fp:
             json.dump(log, fp, sort_keys=True, indent=4)
 
         self.logger.info("Accuracy over 200 randomly chosen documents: " + str(acc))
@@ -128,20 +142,21 @@ class Word2DocTest:
         embb = data['pivot_embedding']
         ctx = data['doc_window']
 
-        ctx = self.__normalize_context(old_context, ctx)
+        ctx, n_docs_rm = self.__normalize_context(old_context, ctx)
+        data['n_docs_rm'] = n_docs_rm
 
         if ctx is None:
             print("Not enough context docs found, skipping.")
-            return None
+            return None, data
 
         pred = self.word2doc.predict([embb], [ctx])
 
         if pred[0][0] in titles:
             self.logger.info(u' '.join(("Closest document: ", titles[pred[0][0]])).encode('utf-8'))
-            return True
+            return True, data
         else:
             self.logger.info("Document not found.")
-            return False
+            return False, data
 
     def pre_process(self, keyword):
         # Encode pivots as word embeddings using infersent
@@ -201,7 +216,7 @@ class Word2DocTest:
             else:
                 counter += 1
 
-        if len(ctx) < 5:
+        if len(ctx) < 1:
             return None
 
         # Filling up contexts with duplicates
@@ -211,7 +226,7 @@ class Word2DocTest:
 
         self.logger.info("Removed " + str(counter) + " unindexed documents from context")
 
-        return ctx
+        return ctx, counter
 
 
 # Start test here

@@ -2,6 +2,7 @@ import os
 import random
 import time
 
+from random import shuffle
 from tqdm import tqdm
 import numpy as np
 import prettytable
@@ -21,7 +22,7 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 100,
+            'epochs': 200,
             'batch_size': 512,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -166,27 +167,33 @@ class Word2Doc:
                     labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
 
             # Input embedding
-            embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
-            if mode == "train":
-                embedded_input = tf.nn.dropout(embedded_input, 0.3)
+            # embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
+            # if mode == "train":
+            #     embedded_input = tf.nn.dropout(embedded_input, 0.3)
 
             # Context embeddings
             doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
             if mode == "train":
-                embedded_docs = tf.nn.dropout(embedded_docs, 0.3)
+                embedded_docs = tf.nn.dropout(embedded_docs, 0.4)
 
             # Contact layers
-            concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
-            embb_dim = n_embedding * (n_context + 1)
+            exp_dim_inputs = tf.expand_dims(inputs, axis=1)
+            input_reshaped = tf.reshape(exp_dim_inputs, [tf.shape(exp_dim_inputs)[0], int(n_input / n_embedding), n_embedding])
+            concat_embb = tf.concat([embedded_docs, input_reshaped], axis=1)
+            embb_dim = (n_embedding * n_context) + n_input
             concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
             if mode == "train":
-                concat_embb = tf.nn.dropout(concat_embb, 0.3)
+                concat_embb = tf.nn.dropout(concat_embb, 0.4)
 
-            # Merge layer
-            merged_layer = tf.layers.dense(concat_embb, n_embedding, activation=tf.nn.relu, use_bias=True)
+            # Merge layers
+            merged_layer_1 = tf.layers.dense(concat_embb, n_embedding * 2, activation=tf.nn.relu, use_bias=True)
             if mode == "train":
-                merged_layer = tf.nn.dropout(merged_layer, 0.3)
+                merged_layer_1 = tf.nn.dropout(merged_layer_1, 0.4)
+
+            merged_layer_2 = tf.layers.dense(merged_layer_1, n_embedding, activation=tf.nn.relu, use_bias=True)
+            if mode == "train":
+                merged_layer_2 = tf.nn.dropout(merged_layer_2, 0.4)
 
             # Output layer
             with tf.variable_scope("softmax_weights"):
@@ -207,7 +214,7 @@ class Word2Doc:
                         weights=softmax_w,
                         biases=softmax_b,
                         labels=labels,
-                        inputs=merged_layer,
+                        inputs=merged_layer_2,
                         num_sampled=self.hyper_params['n_neg_sample'],
                         num_classes=n_docs)
                     tf.summary.scalar('train_loss', loss[0])
@@ -222,7 +229,7 @@ class Word2Doc:
             if mode == "eval":
                 with tf.name_scope('val_loss'):
                     with tf.variable_scope("softmax_weights", reuse=True):
-                        logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
+                        logits = tf.matmul(merged_layer_2, tf.transpose(softmax_w))
                     with tf.variable_scope("softmax_biases", reuse=True):
                         logits = tf.nn.bias_add(logits, softmax_b)
                     labels_one_hot = tf.one_hot(labels, self.hyper_params['n_classes'])
@@ -238,7 +245,7 @@ class Word2Doc:
             # Predict
             if mode == "predict":
                 with tf.variable_scope("softmax_weights", reuse=True):
-                    logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
+                    logits = tf.matmul(merged_layer_2, tf.transpose(softmax_w))
                 with tf.variable_scope("softmax_biases", reuse=True):
                     logits = tf.nn.bias_add(logits, softmax_b)
                 pred = tf.argmax(logits, 1)
@@ -303,6 +310,8 @@ class Word2Doc:
                 num_batches = self.get_num_batches(embeddings)
                 with tqdm(total=num_batches) as pbar:
                     for batch in tqdm(batches):
+                        for b in batch[1]:
+                            shuffle(b)
                         feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
                         summary, _ = sess.run([summary_opt, op], feed_dict=feed)
 
@@ -319,7 +328,7 @@ class Word2Doc:
                         #     # Update eval TensorBoard
                         #     writer.add_summary(summary, epoch * self.n_batches + counter)
 
-            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_100e_10ctx_dropout"))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
     def eval(self):
         # Load data
@@ -348,7 +357,7 @@ class Word2Doc:
         summary_opt = model['summary']
 
         with tf.Session(graph=train_graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_100e_10ctx_dropout"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
@@ -371,6 +380,8 @@ class Word2Doc:
                     if counter >= n_eval:
                         break
 
+                    # for b in batch[1]:
+                        # shuffle(b)
                     feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
                     summary, l, a = sess.run([summary_opt, loss, acc], feed_dict=feed)
 
@@ -398,7 +409,7 @@ class Word2Doc:
         pred_op = model['op']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_100e_10ctx_dropout"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
             feed = {inputs: x, context_pl: c}
             return sess.run([pred_op], feed_dict=feed)

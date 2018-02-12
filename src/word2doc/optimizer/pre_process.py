@@ -227,7 +227,7 @@ class Word2DocPreprocessor:
                 index = randint(0, len(doc_titles) - 1)
                 doc = doc_titles[index]
 
-                if counter >= 50000:
+                if counter >= 25000:
                     break
 
                 clean_title = ''.join(e for e in doc.lower() if e.isalnum() or e == ' ')
