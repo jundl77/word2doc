@@ -56,68 +56,77 @@ class Word2DocTest:
         _, _, old_context, titles = self.word2doc.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
         while total_counter < 200:
-            # Choose random document
-            index = randint(0, len(titles) - 1)
-            doc = titles[index]
+            try:
+                # Choose random document
+                index = randint(0, len(titles) - 1)
+                doc = titles[index]
 
-            print("Run no. " + str(total_counter))
-            if total_counter > 0:
-                acc = float(succ_counter) / float(total_counter)
-                print("Accuracy: " + str(acc))
-            print(u' '.join(("Document: ", doc)).encode('utf-8'))
-            intro_par = self.extractor.extract_label(doc)
-            print("Intro paragraph:")
-            print(intro_par)
+                print("Run no. " + str(total_counter))
+                if total_counter > 0:
+                    acc = float(succ_counter) / float(total_counter)
+                    print("Accuracy: " + str(acc))
+                print(u' '.join(("Document: ", doc)).encode('utf-8'))
+                intro_par = self.extractor.extract_label(doc)
+                print("Intro paragraph:")
+                print(intro_par)
 
-            skip = input("Skip? (y\\n)")
-            if skip == "y":
+                skip = input("Skip? (y\\n)")
+                if skip == "y":
+                    continue
+
+                keyword = input("Create a keyword:\n")
+                self.logger.info("Evaluating " + keyword + "..")
+                res, data = self.eval(keyword, old_context, titles)
+
+                if res is None:
+                    continue
+
+                if res:
+                    prompt = False
+                    correct = False
+
+                    while not prompt:
+                        answer = input("Is the response correct? (y\\n)")
+
+                        if answer == "y":
+                            succ_counter += 1
+                            print("Saved success.")
+                            correct = True
+                            prompt = True
+                        elif answer == "n":
+                            err_counter += 1
+                            print("Saved error.")
+                            correct = False
+                            prompt = True
+                        else:
+                            print("Wrong input, try again (y\\n)")
+                else:
+                    err_counter += 1
+                    correct = False
+                    self.logger.info("Saved error.")
+
+                test_data.append({
+                    'doc_index': index,
+                    'doc_title': doc,
+                    'query': data['keyword'],
+                    'pivot_embeddings': data['pivot_embedding'],
+                    'doc_window': data['doc_window']
+                })
+
+                log.append({
+                    "Tested document": doc,
+                    "User keyword": keyword,
+                    "Number of context docs removed": data['n_docs_rm'],
+                    "Correct": correct
+                })
+                total_counter += 1
+
+                # Save test data
+                name = os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy')
+                np.save(name, test_data)
+            except:
+                print("Error, continuing")
                 continue
-
-            keyword = input("Create a keyword:\n")
-            self.logger.info("Evaluating " + keyword + "..")
-            res, data = self.eval(keyword, old_context, titles)
-
-            if res is None:
-                continue
-
-            if res:
-                answer = input("Is the response correct? (y\\n)")
-
-                prompt = False
-                correct = False
-                while not prompt:
-                    if answer == "y":
-                        succ_counter += 1
-                        print("Saved success.")
-                        correct = True
-                        prompt = True
-                    elif answer == "n":
-                        err_counter += 1
-                        print("Saved error.")
-                        correct = False
-                        prompt = True
-                    else:
-                        print("Wrong input, try again (y\\n)")
-            else:
-                err_counter += 1
-                correct = False
-                self.logger.info("Saved error.")
-
-            test_data.append({
-                'doc_index': index,
-                'doc_title': doc,
-                'query': data['keyword'],
-                'pivot_embeddings': data['pivot_embedding'],
-                'doc_window': data['doc_window']
-            })
-
-            log.append({
-                "Tested document": doc,
-                "User keyword": keyword,
-                "Number of context docs removed": data['n_docs_rm'],
-                "Correct": correct
-            })
-            total_counter += 1
 
         acc = float(succ_counter) / float(total_counter)
         log.append({
@@ -143,12 +152,12 @@ class Word2DocTest:
         ctx = data['doc_window']
 
         ctx, n_docs_rm = self.__normalize_context(old_context, ctx)
-        data['n_docs_rm'] = n_docs_rm
 
         if ctx is None:
             print("Not enough context docs found, skipping.")
-            return None, data
+            return None, None
 
+        data['n_docs_rm'] = n_docs_rm
         pred = self.word2doc.predict([embb], [ctx])
 
         if pred[0][0] in titles:
