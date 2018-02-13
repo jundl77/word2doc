@@ -3,6 +3,7 @@ import random
 import time
 
 from random import shuffle
+from random import randint
 from tqdm import tqdm
 import numpy as np
 import prettytable
@@ -57,8 +58,8 @@ class Word2Doc:
         os.makedirs(path)
         return path
 
-    def load_data(self, path):
-        self.logger.info('Load ' + path)
+    def load_train_data(self, path):
+        self.logger.info('Load training data: ' + path)
 
         data = np.load(path)
 
@@ -87,6 +88,31 @@ class Word2Doc:
 
         return labels, embeddings, context, titles
 
+    def load_test_data(self, path):
+        self.logger.info('Load test data: ' + path)
+
+        data = np.load(path)
+
+        labels = list()
+        titles = dict()
+        embeddings = list()
+        context = list()
+
+        for data_dict in data:
+            doc_id = data_dict['doc_index']
+            titles[doc_id] = data_dict['doc_title']
+            ctx = data_dict['doc_window']
+
+            e = data_dict['pivot_embeddings']
+
+            labels.append([doc_id])
+            embeddings.append(e)
+
+            # neg_ctx = self.negative_samples(data, ctx, 1)
+            context.append(self.fill_contexts(ctx))
+
+        return labels, embeddings, context, titles
+
     def fill_contexts(self, ctx):
         while len(ctx) < 10:
             ctx.append(0)
@@ -107,6 +133,41 @@ class Word2Doc:
         i = 0
         for context in ctx:
             ctx[i] = list(map(lambda n: mapping[n], context))
+            i += 1
+
+        return ctx
+
+    def normalize_test_context(self, old_ctx, new_ctx):
+        """Map testing context docs to the domain of the training context docs
+        (i.e. [0, 5M] -> [0, 47k] with 5k training samples"""
+
+        # Create mapping
+        old_ctx = list(old_ctx)
+        i = 0
+        mapping = {}
+        for context in old_ctx:
+            for num in context:
+                if num not in mapping:
+                    mapping[num] = i
+                    i += 1
+
+        # Map testing context domain to training context domain
+        ctx = list(new_ctx)
+        i = 0
+        for context in new_ctx:
+
+            # Map if possible (sometimes documents are not in the training domain range, so they have to be duplicated)
+            single_ctx = list()
+            for num in context:
+                if num in mapping:
+                    single_ctx.append(mapping[num])
+
+            # Filling up contexts with duplicates
+            for z in range(0, 10 - len(single_ctx)):
+                index = randint(0, len(single_ctx) - 1)
+                single_ctx.append(single_ctx[index])
+
+            ctx[i] = single_ctx
             i += 1
 
         return ctx
@@ -262,7 +323,7 @@ class Word2Doc:
 
     def train(self):
         # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+        target, embeddings, context, titles = self.load_test_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
         context = self.normalize_context(context)
 
@@ -324,11 +385,17 @@ class Word2Doc:
 
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
-    def eval(self):
-        # Load data
-        target, embeddings, context, titles = self.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+    def eval(self, mode):
 
-        context = self.normalize_context(context)
+        # Load training data
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+
+        if not mode == "train":
+            # Load testing data instead
+            target, embeddings, context_test, titles = self.load_test_data(os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+            context = self.normalize_test_context(context, context_test)
+        else:
+            context = self.normalize_context(context)
 
         # Shuffle data
         self.logger.info('Shuffling data..')
@@ -355,6 +422,11 @@ class Word2Doc:
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
+
+            # Set batch size to 1 if we are using hand picked test set
+            if not mode == "train":
+                self.hyper_params['batch_size'] = 1
+                self.hyper_params['eval_fraction'] = 1
 
             num_batches = self.get_num_batches(embeddings)
             batches = self.get_batches(embeddings, context, target)
@@ -392,7 +464,10 @@ class Word2Doc:
             total_acc = total_acc / counter
 
             # Print results
-            self.logger.info("Loss: " + str(total_loss) + " -- Accuracy: " + str(total_acc))
+            if mode == "train":
+                self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
+            else:
+                self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
 
     def predict(self, x, c):
         model = self.predict_model

@@ -54,7 +54,8 @@ def handle_model_type(args):
             net.train()
         elif args.model_action == 'eval':
             net = Word2Doc()
-            net.eval()
+            # net.eval("train")
+            net.eval("test")
 
 
 # ------------------------------------------------------------------------------

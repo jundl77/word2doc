@@ -158,6 +158,8 @@ class Word2DocTest:
             return None, None
 
         data['n_docs_rm'] = n_docs_rm
+        data['doc_window'] = ctx
+
         pred = self.word2doc.predict([embb], [ctx])
 
         if pred[0][0] in titles:
