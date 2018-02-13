@@ -321,6 +321,25 @@ class Word2Doc:
             'summary': summary
         }
 
+    def train_model(self):
+        # Set up model
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.name_scope('model_train'):
+                model_train = self.model("train")
+            with tf.name_scope('model_eval'):
+                model_eval = self.model("eval")
+
+        return {
+            "graph": graph,
+            "inputs": model_train['inputs'],
+            "context": model_train['context'],
+            "labels": model_train['labels'],
+            "train_op": model_train['op'],
+            "train_summary": model_train['summary'],
+            "eval_summary": model_eval['summary']
+        }
+
     def train(self):
         # Load data
         target, embeddings, context, titles = self.load_test_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
@@ -333,22 +352,21 @@ class Word2Doc:
         self.logger.info('Done shuffling data.')
 
         # Set up model
-        model = self.model("train")
-        model_eval = self.model("eval")
+        model = self.train_model()
         model_id = str(int(round(time.time())))
 
         self.logger.info('Training model with hyper params:')
         self.log_hyper_params(model_id)
 
-        train_graph = model['graph']
+        graph = model['graph']
         inputs = model['inputs']
         context_pl = model['context']
         labels = model['labels']
-        op = model['op']
-        summary_opt = model['summary']
-        eval_summary_opt = model_eval['summary']
+        op = model['train_op']
+        summary_opt = model['train_summary']
+        eval_summary_opt = model['eval_summary']
 
-        with tf.Session(graph=train_graph) as sess:
+        with tf.Session(graph=graph) as sess:
             sess.run(tf.global_variables_initializer())
 
             # Set up TensorBoard
@@ -365,8 +383,11 @@ class Word2Doc:
                 num_batches = self.get_num_batches(embeddings)
                 with tqdm(total=num_batches) as pbar:
                     for batch in tqdm(batches):
+
+                        # Shuffle order of context docs within tensor
                         for b in batch[1]:
                             shuffle(b)
+
                         feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
                         summary, _ = sess.run([summary_opt, op], feed_dict=feed)
 
@@ -377,11 +398,11 @@ class Word2Doc:
                         counter += 1
                         pbar.update()
 
-                        # if counter % 1000 == 0:
-                        #     summary = sess.run([eval_summary_opt], feed_dict=feed)
-                        #
-                        #     # Update eval TensorBoard
-                        #     writer.add_summary(summary, epoch * self.n_batches + counter)
+                        if counter % 1000 == 0:
+                            summary = sess.run([eval_summary_opt], feed_dict=feed)
+
+                            # Update eval TensorBoard
+                            writer.add_summary(summary, epoch * self.n_batches + counter)
 
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
