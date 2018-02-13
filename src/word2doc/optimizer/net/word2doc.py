@@ -385,7 +385,16 @@ class Word2Doc:
 
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
-    def eval(self, mode):
+    def eval(self):
+        self.eval_impl("train")
+
+        total_acc = 0
+        for i in range(0, 10):
+            total_acc += self.eval_impl("test")
+
+        self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
+
+    def eval_impl(self, mode):
 
         # Load training data
         target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
@@ -468,6 +477,8 @@ class Word2Doc:
                 self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
             else:
                 self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
+
+            return total_acc
 
     def predict(self, x, c):
         model = self.predict_model
