@@ -42,7 +42,7 @@ class Word2Doc:
             'out_activation': 'softmax',
         }
 
-        self.predict_model = self.model("predict", False)
+        self.predict_model = self.model_predict()
 
     def log_hyper_params(self, id):
         self.hyper_params['TIME'] = id
@@ -226,7 +226,7 @@ class Word2Doc:
             with tf.name_scope('labels'):
                 labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
             with tf.name_scope('is_eval'):
-                is_eval = tf.placeholder(tf.bool, shape=(None, 1), name='is_eval')
+                is_eval = tf.placeholder(tf.bool, shape=1, name='is_eval')
 
             return inputs, context, labels, is_eval
 
@@ -237,7 +237,7 @@ class Word2Doc:
         n_docs = self.hyper_params['n_classes']
         n_context = self.hyper_params['n_context_docs']
 
-        with tf.variable_scope('net'):
+        with tf.variable_scope('net', reuse=tf.AUTO_REUSE):
             # Input embedding
             embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
             if mode == "train":
@@ -263,10 +263,11 @@ class Word2Doc:
                 merged_layer = tf.nn.dropout(merged_layer, 0.3)
 
             # Output layer
-            with tf.variable_scope("softmax_weights"):
-                softmax_w = tf.Variable(tf.truncated_normal((n_docs, n_embedding)))
-            with tf.variable_scope("softmax_biases"):
-                softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
+            with tf.control_dependencies(None):
+                with tf.name_scope("softmax_weights"):
+                    softmax_w = tf.Variable(tf.truncated_normal((n_docs, n_embedding)))
+                with tf.name_scope("softmax_biases"):
+                    softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
 
         self.saver = tf.train.Saver()
 
@@ -292,7 +293,7 @@ class Word2Doc:
         with tf.name_scope("optimizer"):
             optimizer = tf.train.AdamOptimizer().minimize(cost)
 
-        return optimizer
+        return optimizer, cost, cost
 
     def __eval_loss_func(self, softmax_w, softmax_b, labels, merged_layer):
         """Calculate loss over all data. Only use this for eval purposes."""
@@ -312,7 +313,12 @@ class Word2Doc:
             val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             tf.summary.scalar('val_acc', val_acc)
 
-        return [val_loss, val_acc]
+        # Create a fake optimizer that is never used, so that TF thinks we are returning the same data types.
+        # Yes, it's a big hack.
+        with tf.name_scope("fake_optimizer"):
+            optimizer = tf.train.AdamOptimizer().minimize(tf.reduce_mean(val_loss))
+
+        return optimizer, val_loss, val_acc
 
     def model(self):
         start_time = time.time()
@@ -322,24 +328,27 @@ class Word2Doc:
         with graph.as_default():
             inputs, context, labels, is_eval = self.__model_inputs("train")
 
-            merged_layer, softmax_w, softmax_b = tf.cond(is_eval,
+            merged_layer, softmax_w, softmax_b = tf.cond(is_eval[0],
                                                          lambda: self.__model_net(inputs, context, "eval"),
                                                          lambda: self.__model_net(inputs, context, "train"))
 
-            res = tf.cond(is_eval,
-                         lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer),
-                         lambda: self.__negative_sampling(softmax_w, softmax_b, labels, merged_layer))
+            optimizer, loss, acc = tf.cond(is_eval[0],
+                                           lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer),
+                                           lambda: self.__negative_sampling(softmax_w, softmax_b, labels, merged_layer))
 
             summary = tf.summary.merge_all()
 
         self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
 
         return {
+            'graph': graph,
             'inputs': inputs,
             'context': context,
             'labels': labels,
             'is_eval': is_eval,
-            'res': res,
+            'optimizer': optimizer,
+            'loss': loss,
+            'acc': acc,
             'summary': summary
         }
 
@@ -352,9 +361,9 @@ class Word2Doc:
             inputs, context = self.__model_inputs("predict")
             merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, "predict")
 
-            with tf.variable_scope("softmax_weights", reuse=True):
+            with tf.name_scope("softmax_weights"):
                 logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
-            with tf.variable_scope("softmax_biases", reuse=True):
+            with tf.name_scope("softmax_biases"):
                 logits = tf.nn.bias_add(logits, softmax_b)
             pred = tf.argmax(logits, 1)
 
@@ -363,6 +372,7 @@ class Word2Doc:
         self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
 
         return {
+            'graph': graph,
             'inputs': inputs,
             'context': context,
             'pred': pred,
@@ -375,9 +385,7 @@ class Word2Doc:
 
     def train(self):
         # Load data
-        target, embeddings, context, titles = self.load_test_data(
-            os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
-
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
         context = self.normalize_context(context)
 
         # Shuffle data
@@ -386,19 +394,22 @@ class Word2Doc:
         self.logger.info('Done shuffling data.')
 
         # Set up model
-        model = self.train_model()
+        model = self.model()
         model_id = str(int(round(time.time())))
 
         self.logger.info('Training model with hyper params:')
         self.log_hyper_params(model_id)
 
+        # Extract relevant objects from tf model
         graph = model['graph']
-        inputs = model['inputs']
+        inputs_pl = model['inputs']
         context_pl = model['context']
-        labels = model['labels']
-        op = model['train_op']
-        summary_opt = model['train_summary']
-        eval_summary_opt = model['eval_summary']
+        labels_pl = model['labels']
+        is_eval_pl = model['is_eval']
+        optimizer = model['optimizer']
+        loss_op = model['loss']
+        acc_op = model['acc']
+        summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
             sess.run(tf.global_variables_initializer())
@@ -422,8 +433,8 @@ class Word2Doc:
                         for b in batch[1]:
                             shuffle(b)
 
-                        feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
-                        summary, _ = sess.run([summary_opt, op], feed_dict=feed)
+                        feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], is_eval_pl: [False]}
+                        summary, _ = sess.run([summary_op, optimizer], feed_dict=feed)
 
                         # Update train TensorBoard
                         writer.add_summary(summary, epoch * num_batches + counter)
@@ -432,11 +443,13 @@ class Word2Doc:
                         counter += 1
                         pbar.update()
 
+                        # Perform eval every nth step
                         if counter % 1000 == 0:
-                            summary = sess.run([eval_summary_opt], feed_dict=feed)
+                            summary, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
 
                             # Update eval TensorBoard
-                            writer.add_summary(summary, epoch * self.n_batches + counter)
+                            batches = self.get_num_batches(embeddings)
+                            writer.add_summary(summary, epoch * batches + counter)
 
             self.saver.save(sess,
                             os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
