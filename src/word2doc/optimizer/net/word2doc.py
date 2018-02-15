@@ -14,6 +14,16 @@ from word2doc.util import logger
 
 
 class Word2Doc:
+    """
+    Word2Doc model is defined here.
+
+    Possible modes:
+    0: training
+    1: testing with train data
+    2: testing with eval data
+    3: prediction
+    """
+
     def __init__(self):
         self.logger = logger.get_logger()
         self.saver = None
@@ -24,10 +34,10 @@ class Word2Doc:
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
             'epochs': 100,
-            'batch_size': 512,
+            'batch_size': 64,
             'n_input': 4096,
             'n_context_docs': 10,
-            'n_neg_sample': 100,
+            'n_neg_sample': 10,
             'EVALUATION PARAMS': '',
             'eval_fraction': 1,
             '': '',
@@ -220,32 +230,38 @@ class Word2Doc:
         with tf.name_scope('context'):
             context = tf.placeholder(tf.int64, shape=(None, n_context), name='contexts')
 
-        if mode is "predict":
+        # Prediction mode
+        if mode is 3:
             return inputs, context
+
+        # Train or test mode
         else:
             with tf.name_scope('labels'):
                 labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
 
-            if mode is "eval":
+            # Test mode
+            if mode > 0:
                 return inputs, context, labels
-            else:
-                with tf.name_scope('is_eval'):
-                    is_eval = tf.placeholder(tf.bool, shape=1, name='is_eval')
 
-                return inputs, context, labels, is_eval
+            # Train mode
+            else:
+                with tf.name_scope('mode'):
+                    mode_pl = tf.placeholder(tf.int32, shape=1, name='mode')
+
+                return inputs, context, labels, mode_pl
 
     def __model_net(self, inputs, context, mode):
         """Define the net here."""
 
         def __apply_dropout(mode, tensor, dropout_value):
             """Applies dropout, but only if we are in training."""
-            return tf.cond(tf.equal(mode, tf.constant(True)), lambda: tensor, lambda: tf.nn.dropout(tensor, dropout_value))
+            return tf.cond(tf.greater(mode, tf.constant(0)), lambda: tensor, lambda: tf.nn.dropout(tensor, dropout_value))
 
         n_embedding = self.hyper_params['n_embedding']
         n_docs = self.hyper_params['n_classes']
         n_context = self.hyper_params['n_context_docs']
 
-        with tf.variable_scope('net', reuse=tf.AUTO_REUSE):
+        with tf.variable_scope('net'):
             # Input embedding
             embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
             embedded_input = __apply_dropout(mode, embedded_input, 0.3)
@@ -288,10 +304,10 @@ class Word2Doc:
                 inputs=merged_layer,
                 num_sampled=self.hyper_params['n_neg_sample'],
                 num_classes=n_docs)
-            loss_summary = tf.summary.scalar('train_loss', loss[0])
+            loss_summary = tf.summary.scalar('loss_ngs', loss[0])
         with tf.name_scope("cost"):
             cost = tf.reduce_mean(loss)
-            cost_summary = tf.summary.scalar("cost", cost)
+            cost_summary = tf.summary.scalar("cost_ngs", cost)
         with tf.name_scope("optimizer"):
             optimizer = tf.train.AdamOptimizer().minimize(cost)
 
@@ -299,8 +315,13 @@ class Word2Doc:
 
         return optimizer, summary, cost, cost
 
-    def __eval_loss_func(self, softmax_w, softmax_b, labels, merged_layer):
+    def __eval_loss_func(self, softmax_w, softmax_b, labels, merged_layer, mode):
         """Calculate loss over all data. Only use this for eval purposes."""
+
+        def __eval_summary(mode, suffix, value):
+            return tf.cond(tf.equal(mode, tf.constant(1)),
+                lambda: tf.summary.scalar("train_" + suffix, value),
+                lambda: tf.summary.scalar("val_" + suffix, value))
 
         with tf.name_scope('val_loss'):
             with tf.variable_scope("softmax_weights", reuse=True):
@@ -309,13 +330,17 @@ class Word2Doc:
                 logits = tf.nn.bias_add(logits, softmax_b)
             labels_one_hot = tf.one_hot(labels, self.hyper_params['n_classes'])
             val_loss = tf.nn.softmax_cross_entropy_with_logits(labels=labels_one_hot, logits=logits)
-            loss_summary = tf.summary.scalar('val_loss', val_loss[0])
+
+            # Add loss to TensorBoard
+            loss_summary = __eval_summary(mode, "loss", val_loss[0])
 
         with tf.name_scope('val_acc'):
             labels_flat = tf.map_fn(lambda l: l[0], labels)
             correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
             val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            acc_summary = tf.summary.scalar('val_acc', val_acc)
+
+            # Add acc to TensorBoard
+            acc_summary = __eval_summary(mode, "acc", val_acc)
 
         # Create a fake optimizer that is never used, so that TF thinks we are returning the same data types.
         # Yes, it's a big hack.
@@ -333,14 +358,14 @@ class Word2Doc:
         graph = tf.Graph()
         with graph.as_default():
             # Get input tensors
-            inputs, context, labels, is_eval = self.__model_inputs("train")
+            inputs, context, labels, mode = self.__model_inputs(mode=0)
 
             # Define layers
-            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, is_eval[0])
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, mode[0])
 
             # Perform backprop or other optimization
-            optimizer, summary, loss, acc = tf.cond(is_eval[0],
-                lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer),
+            optimizer, summary, loss, acc = tf.cond(tf.greater(mode[0], tf.constant(0)),
+                lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer, mode[0]),
                 lambda: self.__negative_sampling(softmax_w, softmax_b, labels, merged_layer))
 
         self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
@@ -350,7 +375,7 @@ class Word2Doc:
             'inputs': inputs,
             'context': context,
             'labels': labels,
-            'is_eval': is_eval,
+            'mode': mode,
             'optimizer': optimizer,
             'loss': loss,
             'acc': acc,
@@ -370,7 +395,7 @@ class Word2Doc:
             merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, True)
 
             # Calculate accuracy
-            _, summary, loss, acc = self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer)
+            _, summary, loss, acc = self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer, 1)
 
         self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
 
@@ -391,10 +416,10 @@ class Word2Doc:
         graph = tf.Graph()
         with graph.as_default():
             # Get input tensors
-            inputs, context = self.__model_inputs("predict")
+            inputs, context = self.__model_inputs(3)
 
             # Define layers
-            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, True)
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, 3)
 
             # Calculate prediction
             with tf.name_scope("softmax_weights"):
@@ -419,7 +444,7 @@ class Word2Doc:
     # DEFINE SESSIONS
     # -----------------------------------------------------------------------------------------------------------------
 
-    def train(self):
+    def train(self, eval=True):
         # Load data
         target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
         context = self.normalize_context(context)
@@ -441,7 +466,7 @@ class Word2Doc:
         inputs_pl = model['inputs']
         context_pl = model['context']
         labels_pl = model['labels']
-        is_eval_pl = model['is_eval']
+        mode_pl = model['mode']
         optimizer = model['optimizer']
         loss_op = model['loss']
         acc_op = model['acc']
@@ -469,7 +494,7 @@ class Word2Doc:
                         for b in batch[1]:
                             shuffle(b)
 
-                        feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], is_eval_pl: [False]}
+                        feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [0]}
                         summary, _ = sess.run([summary_op, optimizer], feed_dict=feed)
 
                         # Update train TensorBoard
@@ -480,12 +505,18 @@ class Word2Doc:
                         pbar.update()
 
                         # Perform eval every nth step
-                        if counter % 1 == 0:
-                            feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], is_eval_pl: [True]}
-                            summary, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                        if counter % 10 == 0:
 
-                            # Update eval TensorBoard
-                            writer.add_summary(summary, epoch * num_batches + counter)
+                            # Eval using training data
+                            feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [1]}
+                            summary_train, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                            writer.add_summary(summary_train, epoch * num_batches + counter)
+
+                            # Eval using testing data
+                            if eval:
+                                feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [2]}
+                                summary_eval, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                                writer.add_summary(summary_eval, epoch * num_batches + counter)
 
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
 
