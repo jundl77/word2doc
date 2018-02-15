@@ -8,6 +8,7 @@ from tqdm import tqdm
 import numpy as np
 import prettytable
 import tensorflow as tf
+from tensorflow.contrib.tensorboard.plugins import projector
 
 from word2doc.util import constants
 from word2doc.util import logger
@@ -389,10 +390,10 @@ class Word2Doc:
         graph = tf.Graph()
         with graph.as_default():
             # Get input tensors
-            inputs, context, labels = self.__model_inputs("eval")
+            inputs, context, labels = self.__model_inputs(1)
 
             # Define layers
-            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, True)
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, 1)
 
             # Calculate accuracy
             _, summary, loss, acc = self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer, 1)
@@ -445,8 +446,13 @@ class Word2Doc:
     # -----------------------------------------------------------------------------------------------------------------
 
     def train(self, eval=True):
+        data_name = "2-wpp.npy"
+        model_name = "word2doc_model_200_100e_10ctx_dropout"
+        model_id = str(int(round(time.time())))
+        log_path = self.create_run_log(model_id)
+
         # Load data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), data_name))
         context = self.normalize_context(context)
 
         # Shuffle data
@@ -456,7 +462,6 @@ class Word2Doc:
 
         # Set up model
         model = self.model_train()
-        model_id = str(int(round(time.time())))
 
         self.logger.info('Training model with hyper params:')
         self.log_hyper_params(model_id)
@@ -476,7 +481,13 @@ class Word2Doc:
             sess.run(tf.global_variables_initializer())
 
             # Set up TensorBoard
-            writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
+            writer = tf.summary.FileWriter(log_path, sess.graph)
+            config = projector.ProjectorConfig()
+
+            # Config embeddings projector
+            embedding = config.embeddings.add()
+            doc_embeddings = tf.get_variable("doc_embeddings", [2000, 512], dtype=tf.float32)
+            embedding.tensor_name = doc_embeddings.name
 
             self.logger.info("Starting training..")
 
@@ -518,10 +529,17 @@ class Word2Doc:
                                 summary_eval, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
                                 writer.add_summary(summary_eval, epoch * num_batches + counter)
 
-            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
+                        # Save every nth step
+                        if counter % 100 == 0:
+                            self.saver.save(sess, os.path.join(log_path, model_name))
+
+            # Save once for TensorBoard embeddings projector, and once for easy reuse
+            self.saver.save(sess, os.path.join(log_path, model_name))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
+            projector.visualize_embeddings(writer, config)
 
     def eval(self):
-        self.eval_impl("train")
+        self.eval_impl(1)
 
         # total_acc = 0
         # for i in range(0, 10):
@@ -534,7 +552,7 @@ class Word2Doc:
         # Load training data
         target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
 
-        if not mode == "train":
+        if mode == 2:
             # Load testing data instead
             target, embeddings, context_test, titles = self.load_test_data(
                 os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
@@ -567,7 +585,7 @@ class Word2Doc:
             self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
 
             # Set batch size to 1 if we are using hand picked test set
-            if not mode == "train":
+            if mode == 2:
                 self.hyper_params['batch_size'] = 1
                 self.hyper_params['eval_fraction'] = 1
 
@@ -604,7 +622,7 @@ class Word2Doc:
             total_acc = total_acc / counter
 
             # Print results
-            if mode == "train":
+            if mode == 1:
                 self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
             else:
                 self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
