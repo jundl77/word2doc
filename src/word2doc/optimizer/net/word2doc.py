@@ -269,8 +269,6 @@ class Word2Doc:
                 with tf.name_scope("softmax_biases"):
                     softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
 
-        self.saver = tf.train.Saver()
-
         return merged_layer, softmax_w, softmax_b
 
     def __negative_sampling(self, softmax_w, softmax_b, labels, merged_layer):
@@ -286,14 +284,16 @@ class Word2Doc:
                 inputs=merged_layer,
                 num_sampled=self.hyper_params['n_neg_sample'],
                 num_classes=n_docs)
-            tf.summary.scalar('train_loss', loss[0])
+            loss_summary = tf.summary.scalar('train_loss', loss[0])
         with tf.name_scope("cost"):
             cost = tf.reduce_mean(loss)
-            tf.summary.scalar("cost", cost)
+            cost_summary = tf.summary.scalar("cost", cost)
         with tf.name_scope("optimizer"):
             optimizer = tf.train.AdamOptimizer().minimize(cost)
 
-        return optimizer, cost, cost
+        summary = tf.summary.merge([loss_summary, cost_summary])
+
+        return optimizer, summary, cost, cost
 
     def __eval_loss_func(self, softmax_w, softmax_b, labels, merged_layer):
         """Calculate loss over all data. Only use this for eval purposes."""
@@ -305,20 +305,22 @@ class Word2Doc:
                 logits = tf.nn.bias_add(logits, softmax_b)
             labels_one_hot = tf.one_hot(labels, self.hyper_params['n_classes'])
             val_loss = tf.nn.softmax_cross_entropy_with_logits(labels=labels_one_hot, logits=logits)
-            tf.summary.scalar('val_loss', val_loss[0])
+            loss_summary = tf.summary.scalar('val_loss', val_loss[0])
 
         with tf.name_scope('val_acc'):
             labels_flat = tf.map_fn(lambda l: l[0], labels)
             correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
             val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            tf.summary.scalar('val_acc', val_acc)
+            acc_summary = tf.summary.scalar('val_acc', val_acc)
 
         # Create a fake optimizer that is never used, so that TF thinks we are returning the same data types.
         # Yes, it's a big hack.
         with tf.name_scope("fake_optimizer"):
             optimizer = tf.train.AdamOptimizer().minimize(tf.reduce_mean(val_loss))
 
-        return optimizer, val_loss, val_acc
+        summary = tf.summary.merge([loss_summary, acc_summary])
+
+        return optimizer, summary, val_loss, val_acc
 
     def model(self):
         start_time = time.time()
@@ -329,14 +331,14 @@ class Word2Doc:
             inputs, context, labels, is_eval = self.__model_inputs("train")
 
             merged_layer, softmax_w, softmax_b = tf.cond(is_eval[0],
-                                                         lambda: self.__model_net(inputs, context, "eval"),
-                                                         lambda: self.__model_net(inputs, context, "train"))
+                lambda: self.__model_net(inputs, context, "eval"),
+                lambda: self.__model_net(inputs, context, "train"))
 
-            optimizer, loss, acc = tf.cond(is_eval[0],
-                                           lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer),
-                                           lambda: self.__negative_sampling(softmax_w, softmax_b, labels, merged_layer))
+            optimizer, summary, loss, acc = tf.cond(is_eval[0],
+                lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer),
+                lambda: self.__negative_sampling(softmax_w, softmax_b, labels, merged_layer))
 
-            summary = tf.summary.merge_all()
+            self.saver = tf.train.Saver()
 
         self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
 
@@ -445,6 +447,7 @@ class Word2Doc:
 
                         # Perform eval every nth step
                         if counter % 1000 == 0:
+                            feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], is_eval_pl: [True]}
                             summary, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
 
                             # Update eval TensorBoard
