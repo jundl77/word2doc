@@ -23,7 +23,7 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 1,
+            'epochs': 100,
             'batch_size': 512,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -251,7 +251,7 @@ class Word2Doc:
             embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
@@ -492,11 +492,11 @@ class Word2Doc:
     def eval(self):
         self.eval_impl("train")
 
-        total_acc = 0
-        for i in range(0, 10):
-            total_acc += self.eval_impl("test")
-
-        self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
+        # total_acc = 0
+        # for i in range(0, 10):
+        #     total_acc += self.eval_impl("test")
+        #
+        # self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
 
     def eval_impl(self, mode):
 
