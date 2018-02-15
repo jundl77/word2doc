@@ -225,10 +225,14 @@ class Word2Doc:
         else:
             with tf.name_scope('labels'):
                 labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
-            with tf.name_scope('is_eval'):
-                is_eval = tf.placeholder(tf.bool, shape=1, name='is_eval')
 
-            return inputs, context, labels, is_eval
+            if mode is "eval":
+                return inputs, context, labels
+            else:
+                with tf.name_scope('is_eval'):
+                    is_eval = tf.placeholder(tf.bool, shape=1, name='is_eval')
+
+                return inputs, context, labels, is_eval
 
     def __model_net(self, inputs, context, mode):
         """Define the net here."""
@@ -320,11 +324,11 @@ class Word2Doc:
 
         summary = tf.summary.merge([loss_summary, acc_summary])
 
-        return optimizer, summary, val_loss, val_acc
+        return optimizer, summary, val_loss[0], val_acc
 
-    def model(self):
+    def model_train(self):
         start_time = time.time()
-        self.logger.info("Compiling model...")
+        self.logger.info("Compiling train model...")
 
         graph = tf.Graph()
         with graph.as_default():
@@ -354,6 +358,30 @@ class Word2Doc:
             'summary': summary
         }
 
+    def model_eval(self):
+        start_time = time.time()
+        self.logger.info("Compiling eval model...")
+
+        graph = tf.Graph()
+        with graph.as_default():
+            inputs, context, labels = self.__model_inputs("eval")
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, "eval")
+            _, summary, loss, acc = self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer)
+
+            self.saver = tf.train.Saver()
+
+        self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
+
+        return {
+            'graph': graph,
+            'inputs': inputs,
+            'context': context,
+            'labels': labels,
+            'loss': loss,
+            'acc': acc,
+            'summary': summary
+        }
+
     def model_predict(self):
         start_time = time.time()
         self.logger.info("Compiling predict model...")
@@ -362,13 +390,13 @@ class Word2Doc:
         with graph.as_default():
             inputs, context = self.__model_inputs("predict")
             merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, "predict")
-
             with tf.name_scope("softmax_weights"):
                 logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
             with tf.name_scope("softmax_biases"):
                 logits = tf.nn.bias_add(logits, softmax_b)
             pred = tf.argmax(logits, 1)
 
+            self.saver = tf.train.Saver()
             summary = tf.summary.merge_all()
 
         self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
@@ -382,7 +410,7 @@ class Word2Doc:
         }
 
     # -----------------------------------------------------------------------------------------------------------------
-    # DEFINE SESSION
+    # DEFINE SESSIONS
     # -----------------------------------------------------------------------------------------------------------------
 
     def train(self):
@@ -396,7 +424,7 @@ class Word2Doc:
         self.logger.info('Done shuffling data.')
 
         # Set up model
-        model = self.model()
+        model = self.model_train()
         model_id = str(int(round(time.time())))
 
         self.logger.info('Training model with hyper params:')
@@ -446,16 +474,14 @@ class Word2Doc:
                         pbar.update()
 
                         # Perform eval every nth step
-                        if counter % 1000 == 0:
+                        if counter % 1 == 0:
                             feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], is_eval_pl: [True]}
                             summary, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
 
                             # Update eval TensorBoard
-                            batches = self.get_num_batches(embeddings)
-                            writer.add_summary(summary, epoch * batches + counter)
+                            writer.add_summary(summary, epoch * num_batches + counter)
 
-            self.saver.save(sess,
-                            os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
     def eval(self):
         self.eval_impl("train")
@@ -469,8 +495,7 @@ class Word2Doc:
     def eval_impl(self, mode):
 
         # Load training data
-        target, embeddings, context, titles = self.load_train_data(
-            os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
 
         if not mode == "train":
             # Load testing data instead
@@ -486,26 +511,23 @@ class Word2Doc:
         self.logger.info('Done shuffling data.')
 
         # Set up model
-        model = self.model("eval")
+        model = self.model_eval()
         model_id = str(int(round(time.time()))) + "_eval"
 
         self.logger.info('Evaluating model..')
         self.log_hyper_params(model_id)
 
-        train_graph = model['graph']
-        inputs = model['inputs']
+        # Extract relevant objects from tf model
+        graph = model['graph']
+        inputs_pl = model['inputs']
         context_pl = model['context']
-        labels = model['labels']
-        acc = model['val_acc']
-        loss = model['val_loss']
-        summary_opt = model['summary']
+        labels_pl = model['labels']
+        loss_op = model['loss']
+        acc_op = model['acc']
+        summary_op = model['summary']
 
-        with tf.Session(graph=train_graph) as sess:
-            self.saver.restore(sess,
-                               os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
-
-            # Set up TensorBoard
-            writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
+        with tf.Session(graph=graph) as sess:
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
 
             # Set batch size to 1 if we are using hand picked test set
             if not mode == "train":
@@ -530,13 +552,10 @@ class Word2Doc:
                     if counter >= n_eval:
                         break
 
-                        # for b in batch[1]:
-                        # shuffle(b)
-                    feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
-                    summary, l, a = sess.run([summary_opt, loss, acc], feed_dict=feed)
-
-                    # Update TensorBoard
-                    writer.add_summary(summary, num_batches + counter)
+                    # for b in batch[1]:
+                    # shuffle(b)
+                    feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2]}
+                    summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
 
                     # Update state
                     total_loss += l
