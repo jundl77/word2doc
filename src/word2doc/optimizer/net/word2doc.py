@@ -8,12 +8,23 @@ from tqdm import tqdm
 import numpy as np
 import prettytable
 import tensorflow as tf
+from tensorflow.contrib.tensorboard.plugins import projector
 
 from word2doc.util import constants
 from word2doc.util import logger
 
 
 class Word2Doc:
+    """
+    Word2Doc model is defined here.
+
+    Possible modes:
+    0: training
+    1: testing with train data
+    2: testing with eval data
+    3: prediction
+    """
+
     def __init__(self):
         self.logger = logger.get_logger()
         self.saver = None
@@ -23,11 +34,11 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 200,
-            'batch_size': 512,
+            'epochs': 100,
+            'batch_size': 64,
             'n_input': 4096,
             'n_context_docs': 10,
-            'n_neg_sample': 100,
+            'n_neg_sample': 10,
             'EVALUATION PARAMS': '',
             'eval_fraction': 1,
             '': '',
@@ -42,7 +53,7 @@ class Word2Doc:
             'out_activation': 'softmax',
         }
 
-        self.predict_model = self.model("predict")
+        self.predict_model = self.model_predict()
 
     def log_hyper_params(self, id):
         self.hyper_params['TIME'] = id
@@ -204,39 +215,61 @@ class Word2Doc:
             x, c, y = zip(*batch)
             yield x, c, y
 
-    def model(self, mode):
-        start_time = time.time()
-        self.logger.info("Compiling " + mode + " model ... ")
+    # -----------------------------------------------------------------------------------------------------------------
+    # DEFINE MODEL
+    # -----------------------------------------------------------------------------------------------------------------
+
+    def __model_inputs(self, mode):
+        """Define input placeholders for the model."""
 
         n_input = self.hyper_params['n_input']
         n_context = self.hyper_params['n_context_docs']
+
+        # Define input placeholders
+        with tf.name_scope('input'):
+            inputs = tf.placeholder(tf.float32, shape=(None, n_input), name='inputs')
+        with tf.name_scope('context'):
+            context = tf.placeholder(tf.int64, shape=(None, n_context), name='contexts')
+
+        # Prediction mode
+        if mode is 3:
+            return inputs, context
+
+        # Train or test mode
+        else:
+            with tf.name_scope('labels'):
+                labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
+
+            # Test mode
+            if mode > 0:
+                return inputs, context, labels
+
+            # Train mode
+            else:
+                with tf.name_scope('mode'):
+                    mode_pl = tf.placeholder(tf.int32, shape=1, name='mode')
+
+                return inputs, context, labels, mode_pl
+
+    def __model_net(self, inputs, context, mode):
+        """Define the net here."""
+
+        def __apply_dropout(mode, tensor, dropout_value):
+            """Applies dropout, but only if we are in training."""
+            return tf.cond(tf.greater(mode, tf.constant(0)), lambda: tensor, lambda: tf.nn.dropout(tensor, dropout_value))
+
         n_embedding = self.hyper_params['n_embedding']
         n_docs = self.hyper_params['n_classes']
+        n_context = self.hyper_params['n_context_docs']
 
-        graph = tf.Graph()
-        with graph.as_default():
-
-            # Input
-            with tf.name_scope('input'):
-                inputs = tf.placeholder(tf.float32, shape=(None, n_input), name='inputs')
-            with tf.name_scope('context'):
-                context = tf.placeholder(tf.int64, shape=(None, n_context), name='contexts')
-
-            labels = None
-            if mode is not "predict":
-                with tf.name_scope('labels'):
-                    labels = tf.placeholder(tf.int64, shape=(None, 1), name='labels')
-
+        with tf.variable_scope('net'):
             # Input embedding
             # embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
-            # if mode == "train":
-            #     embedded_input = tf.nn.dropout(embedded_input, 0.3)
+            # embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
-            if mode == "train":
-                embedded_docs = tf.nn.dropout(embedded_docs, 0.4)
 
             # Contact layers
             exp_dim_inputs = tf.expand_dims(inputs, axis=1)
@@ -244,72 +277,159 @@ class Word2Doc:
             concat_embb = tf.concat([embedded_docs, input_reshaped], axis=1)
             embb_dim = (n_embedding * n_context) + n_input
             concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
-            if mode == "train":
-                concat_embb = tf.nn.dropout(concat_embb, 0.4)
+            concat_embb = __apply_dropout(mode, concat_embb, 0.3)
 
-            # Merge layers
-            merged_layer_1 = tf.layers.dense(concat_embb, n_embedding * 2, activation=tf.nn.relu, use_bias=True)
-            if mode == "train":
-                merged_layer_1 = tf.nn.dropout(merged_layer_1, 0.4)
-
-            merged_layer_2 = tf.layers.dense(merged_layer_1, n_embedding, activation=tf.nn.relu, use_bias=True)
-            if mode == "train":
-                merged_layer_2 = tf.nn.dropout(merged_layer_2, 0.4)
+            # Merge layer
+            merged_layer = tf.layers.dense(concat_embb, n_embedding, activation=tf.nn.relu, use_bias=True)
+            merged_layer = __apply_dropout(mode, merged_layer, 0.3)
 
             # Output layer
-            with tf.variable_scope("softmax_weights"):
-                softmax_w = tf.Variable(tf.truncated_normal((n_docs, n_embedding)))
-            with tf.variable_scope("softmax_biases"):
-                softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
-            self.saver = tf.train.Saver()
+            with tf.control_dependencies(None):
+                with tf.name_scope("softmax_weights"):
+                    softmax_w = tf.Variable(tf.truncated_normal((n_docs, n_embedding)))
+                with tf.name_scope("softmax_biases"):
+                    softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
 
-            op = None
-            val_loss = [None]
-            val_acc = None
+        self.saver = tf.train.Saver()
 
-            # Train model
-            if mode == "train":
-                with tf.name_scope("loss"):
-                    loss = tf.nn.sampled_softmax_loss(
-                        weights=softmax_w,
-                        biases=softmax_b,
-                        labels=labels,
-                        inputs=merged_layer_2,
-                        num_sampled=self.hyper_params['n_neg_sample'],
-                        num_classes=n_docs)
-                    tf.summary.scalar('train_loss', loss[0])
-                with tf.name_scope("cost"):
-                    cost = tf.reduce_mean(loss)
-                    tf.summary.scalar("cost", cost)
-                with tf.name_scope("optimizer"):
-                    optimizer = tf.train.AdamOptimizer().minimize(cost)
-                    op = optimizer
+        return merged_layer, softmax_w, softmax_b
 
-            # Eval model
-            if mode == "eval":
-                with tf.name_scope('val_loss'):
-                    with tf.variable_scope("softmax_weights", reuse=True):
-                        logits = tf.matmul(merged_layer_2, tf.transpose(softmax_w))
-                    with tf.variable_scope("softmax_biases", reuse=True):
-                        logits = tf.nn.bias_add(logits, softmax_b)
-                    labels_one_hot = tf.one_hot(labels, self.hyper_params['n_classes'])
-                    val_loss = tf.nn.softmax_cross_entropy_with_logits(labels=labels_one_hot, logits=logits)
-                    tf.summary.scalar('val_loss', val_loss[0])
+    def __negative_sampling(self, softmax_w, softmax_b, labels, merged_layer):
+        """Perform negative sampling and then apply the optimizer. This is for training only."""
 
-                with tf.name_scope('val_acc'):
-                    labels_flat = tf.map_fn(lambda l: l[0], labels)
-                    correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
-                    val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-                    tf.summary.scalar('val_acc', val_acc)
+        n_docs = self.hyper_params['n_classes']
 
-            # Predict
-            if mode == "predict":
-                with tf.variable_scope("softmax_weights", reuse=True):
-                    logits = tf.matmul(merged_layer_2, tf.transpose(softmax_w))
-                with tf.variable_scope("softmax_biases", reuse=True):
-                    logits = tf.nn.bias_add(logits, softmax_b)
-                pred = tf.argmax(logits, 1)
-                op = pred
+        with tf.name_scope("loss"):
+            loss = tf.nn.sampled_softmax_loss(
+                weights=softmax_w,
+                biases=softmax_b,
+                labels=labels,
+                inputs=merged_layer,
+                num_sampled=self.hyper_params['n_neg_sample'],
+                num_classes=n_docs)
+            loss_summary = tf.summary.scalar('loss_ngs', loss[0])
+        with tf.name_scope("cost"):
+            cost = tf.reduce_mean(loss)
+            cost_summary = tf.summary.scalar("cost_ngs", cost)
+        with tf.name_scope("optimizer"):
+            optimizer = tf.train.AdamOptimizer().minimize(cost)
+
+        summary = tf.summary.merge([loss_summary, cost_summary])
+
+        return optimizer, summary, cost, cost
+
+    def __eval_loss_func(self, softmax_w, softmax_b, labels, merged_layer, mode):
+        """Calculate loss over all data. Only use this for eval purposes."""
+
+        def __eval_summary(mode, suffix, value):
+            return tf.cond(tf.equal(mode, tf.constant(1)),
+                lambda: tf.summary.scalar("train_" + suffix, value),
+                lambda: tf.summary.scalar("val_" + suffix, value))
+
+        with tf.name_scope('val_loss'):
+            with tf.variable_scope("softmax_weights", reuse=True):
+                logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
+            with tf.variable_scope("softmax_biases", reuse=True):
+                logits = tf.nn.bias_add(logits, softmax_b)
+            labels_one_hot = tf.one_hot(labels, self.hyper_params['n_classes'])
+            val_loss = tf.nn.softmax_cross_entropy_with_logits(labels=labels_one_hot, logits=logits)
+
+            # Add loss to TensorBoard
+            loss_summary = __eval_summary(mode, "loss", val_loss[0])
+
+        with tf.name_scope('val_acc'):
+            labels_flat = tf.map_fn(lambda l: l[0], labels)
+            correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
+            val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+            # Add acc to TensorBoard
+            acc_summary = __eval_summary(mode, "acc", val_acc)
+
+        # Create a fake optimizer that is never used, so that TF thinks we are returning the same data types.
+        # Yes, it's a big hack.
+        with tf.name_scope("fake_optimizer"):
+            optimizer = tf.train.AdamOptimizer().minimize(tf.reduce_mean(val_loss))
+
+        summary = tf.summary.merge([loss_summary, acc_summary])
+
+        return optimizer, summary, val_loss[0], val_acc
+
+    def model_train(self):
+        start_time = time.time()
+        self.logger.info("Compiling train model...")
+
+        graph = tf.Graph()
+        with graph.as_default():
+            # Get input tensors
+            inputs, context, labels, mode = self.__model_inputs(mode=0)
+
+            # Define layers
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, mode[0])
+
+            # Perform backprop or other optimization
+            optimizer, summary, loss, acc = tf.cond(tf.greater(mode[0], tf.constant(0)),
+                lambda: self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer, mode[0]),
+                lambda: self.__negative_sampling(softmax_w, softmax_b, labels, merged_layer))
+
+        self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
+
+        return {
+            'graph': graph,
+            'inputs': inputs,
+            'context': context,
+            'labels': labels,
+            'mode': mode,
+            'optimizer': optimizer,
+            'loss': loss,
+            'acc': acc,
+            'summary': summary
+        }
+
+    def model_eval(self):
+        start_time = time.time()
+        self.logger.info("Compiling eval model...")
+
+        graph = tf.Graph()
+        with graph.as_default():
+            # Get input tensors
+            inputs, context, labels = self.__model_inputs(1)
+
+            # Define layers
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, 1)
+
+            # Calculate accuracy
+            _, summary, loss, acc = self.__eval_loss_func(softmax_w, softmax_b, labels, merged_layer, 1)
+
+        self.logger.info('Model compiled in {0} seconds'.format(time.time() - start_time))
+
+        return {
+            'graph': graph,
+            'inputs': inputs,
+            'context': context,
+            'labels': labels,
+            'loss': loss,
+            'acc': acc,
+            'summary': summary
+        }
+
+    def model_predict(self):
+        start_time = time.time()
+        self.logger.info("Compiling predict model...")
+
+        graph = tf.Graph()
+        with graph.as_default():
+            # Get input tensors
+            inputs, context = self.__model_inputs(3)
+
+            # Define layers
+            merged_layer, softmax_w, softmax_b = self.__model_net(inputs, context, 3)
+
+            # Calculate prediction
+            with tf.name_scope("softmax_weights"):
+                logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
+            with tf.name_scope("softmax_biases"):
+                logits = tf.nn.bias_add(logits, softmax_b)
+            pred = tf.argmax(logits, 1)
 
             summary = tf.summary.merge_all()
 
@@ -319,17 +439,22 @@ class Word2Doc:
             'graph': graph,
             'inputs': inputs,
             'context': context,
-            'labels': labels,
-            'op': op,
-            'val_loss': val_loss[0],
-            'val_acc': val_acc,
+            'pred': pred,
             'summary': summary
         }
 
-    def train(self):
-        # Load data
-        target, embeddings, context, titles = self.load_test_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+    # -----------------------------------------------------------------------------------------------------------------
+    # DEFINE SESSIONS
+    # -----------------------------------------------------------------------------------------------------------------
 
+    def train(self, eval=True):
+        data_name = "2-wpp.npy"
+        model_name = "word2doc_model_200_100e_10ctx_dropout"
+        model_id = str(int(round(time.time())))
+        log_path = self.create_run_log(model_id)
+
+        # Load data
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), data_name))
         context = self.normalize_context(context)
 
         # Shuffle data
@@ -338,26 +463,33 @@ class Word2Doc:
         self.logger.info('Done shuffling data.')
 
         # Set up model
-        model = self.model("train")
-        model_eval = self.model("eval")
-        model_id = str(int(round(time.time())))
+        model = self.model_train()
 
         self.logger.info('Training model with hyper params:')
         self.log_hyper_params(model_id)
 
-        train_graph = model['graph']
-        inputs = model['inputs']
+        # Extract relevant objects from tf model
+        graph = model['graph']
+        inputs_pl = model['inputs']
         context_pl = model['context']
-        labels = model['labels']
-        op = model['op']
-        summary_opt = model['summary']
-        eval_summary_opt = model_eval['summary']
+        labels_pl = model['labels']
+        mode_pl = model['mode']
+        optimizer = model['optimizer']
+        loss_op = model['loss']
+        acc_op = model['acc']
+        summary_op = model['summary']
 
-        with tf.Session(graph=train_graph) as sess:
+        with tf.Session(graph=graph) as sess:
             sess.run(tf.global_variables_initializer())
 
             # Set up TensorBoard
-            writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
+            writer = tf.summary.FileWriter(log_path, sess.graph)
+            config = projector.ProjectorConfig()
+
+            # Config embeddings projector
+            embedding = config.embeddings.add()
+            doc_embeddings = tf.get_variable("doc_embeddings", [2000, 512], dtype=tf.float32)
+            embedding.tensor_name = doc_embeddings.name
 
             self.logger.info("Starting training..")
 
@@ -370,10 +502,13 @@ class Word2Doc:
                 num_batches = self.get_num_batches(embeddings)
                 with tqdm(total=num_batches) as pbar:
                     for batch in tqdm(batches):
+
+                        # Shuffle order of context docs within tensor
                         for b in batch[1]:
                             shuffle(b)
-                        feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
-                        summary, _ = sess.run([summary_opt, op], feed_dict=feed)
+
+                        feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [0]}
+                        summary, _ = sess.run([summary_op, optimizer], feed_dict=feed)
 
                         # Update train TensorBoard
                         writer.add_summary(summary, epoch * num_batches + counter)
@@ -382,31 +517,47 @@ class Word2Doc:
                         counter += 1
                         pbar.update()
 
-                        # if counter % 1000 == 0:
-                        #     summary = sess.run([eval_summary_opt], feed_dict=feed)
-                        #
-                        #     # Update eval TensorBoard
-                        #     writer.add_summary(summary, epoch * self.n_batches + counter)
+                        # Perform eval every nth step
+                        if counter % 10 == 0:
 
-            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
+                            # Eval using training data
+                            feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [1]}
+                            summary_train, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                            writer.add_summary(summary_train, epoch * num_batches + counter)
+
+                            # Eval using testing data
+                            if eval:
+                                feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [2]}
+                                summary_eval, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                                writer.add_summary(summary_eval, epoch * num_batches + counter)
+
+                        # Save every nth step
+                        if counter % 100 == 0:
+                            self.saver.save(sess, os.path.join(log_path, model_name))
+
+            # Save once for TensorBoard embeddings projector, and once for easy reuse
+            self.saver.save(sess, os.path.join(log_path, model_name))
+            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
+            projector.visualize_embeddings(writer, config)
 
     def eval(self):
-        self.eval_impl("train")
+        self.eval_impl(1)
 
-        total_acc = 0
-        for i in range(0, 10):
-            total_acc += self.eval_impl("test")
-
-        self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
+        # total_acc = 0
+        # for i in range(0, 10):
+        #     total_acc += self.eval_impl("test")
+        #
+        # self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
 
     def eval_impl(self, mode):
 
         # Load training data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
 
-        if not mode == "train":
+        if mode == 2:
             # Load testing data instead
-            target, embeddings, context_test, titles = self.load_test_data(os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+            target, embeddings, context_test, titles = self.load_test_data(
+                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
             context = self.normalize_test_context(context, context_test)
         else:
             context = self.normalize_context(context)
@@ -417,28 +568,26 @@ class Word2Doc:
         self.logger.info('Done shuffling data.')
 
         # Set up model
-        model = self.model("eval")
+        model = self.model_eval()
         model_id = str(int(round(time.time()))) + "_eval"
 
         self.logger.info('Evaluating model..')
         self.log_hyper_params(model_id)
 
-        train_graph = model['graph']
-        inputs = model['inputs']
+        # Extract relevant objects from tf model
+        graph = model['graph']
+        inputs_pl = model['inputs']
         context_pl = model['context']
-        labels = model['labels']
-        acc = model['val_acc']
-        loss = model['val_loss']
-        summary_opt = model['summary']
+        labels_pl = model['labels']
+        loss_op = model['loss']
+        acc_op = model['acc']
+        summary_op = model['summary']
 
-        with tf.Session(graph=train_graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout_v2"))
-
-            # Set up TensorBoard
-            writer = tf.summary.FileWriter(self.create_run_log(model_id), sess.graph)
+        with tf.Session(graph=graph) as sess:
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
 
             # Set batch size to 1 if we are using hand picked test set
-            if not mode == "train":
+            if mode == 2:
                 self.hyper_params['batch_size'] = 1
                 self.hyper_params['eval_fraction'] = 1
 
@@ -461,12 +610,9 @@ class Word2Doc:
                         break
 
                     # for b in batch[1]:
-                        # shuffle(b)
-                    feed = {inputs: batch[0], context_pl: batch[1], labels: batch[2]}
-                    summary, l, a = sess.run([summary_opt, loss, acc], feed_dict=feed)
-
-                    # Update TensorBoard
-                    writer.add_summary(summary, num_batches + counter)
+                    # shuffle(b)
+                    feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2]}
+                    summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
 
                     # Update state
                     total_loss += l
@@ -478,7 +624,7 @@ class Word2Doc:
             total_acc = total_acc / counter
 
             # Print results
-            if mode == "train":
+            if mode == 1:
                 self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
             else:
                 self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
@@ -494,8 +640,8 @@ class Word2Doc:
         pred_op = model['op']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout_v2"))
+            self.saver.restore(sess,
+                               os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
 
             feed = {inputs: x, context_pl: c}
             return sess.run([pred_op], feed_dict=feed)
-

@@ -11,7 +11,6 @@ import os
 PROJECT_ROOT_DIR = ''
 DATA_DIR_NAME = 'data'
 LOGS_DIR_NAME = 'logs'
-TENSORBOARD_NAME = 'tensorboard'
 N_WORKERS = 1
 
 # Wikipedia extraction path
@@ -24,6 +23,9 @@ RETRIEVER_MODEL_META_NAME = 'r_model_meta.json'
 
 # Optimizer data
 OPTIMIZER_DATA_NAME = 'opt_data.npz'
+
+# TensorFlow
+TENSORBOARD_NAME = 'tensorboard'
 
 # SQuAD data
 SQUAD_DIR_NAME = 'squad'
