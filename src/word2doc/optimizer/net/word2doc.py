@@ -34,8 +34,9 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 100,
-            'batch_size': 64,
+            'epochs': 10,
+            'batch_size': 512,
+            'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
             'n_neg_sample': 10,
@@ -207,13 +208,20 @@ class Word2Doc:
         return len(batches)
 
     def get_batches(self, embeddings, context, target):
+        batch_size = self.hyper_params['batch_size']
+
         data = list(zip(embeddings, context, target))
 
-        batches = np.array_split(data, int(len(embeddings) / self.hyper_params['batch_size']))
+        batches = np.array_split(data, int(len(embeddings) / batch_size))
 
         for batch in batches:
             x, c, y = zip(*batch)
             yield x, c, y
+
+    def get_eval_batches(self, embeddings, context, target):
+        batch_size = self.hyper_params['eval_batch_size']
+        data = list(zip(embeddings, context, target))
+        return np.array_split(data, int(len(embeddings) / batch_size))
 
     # -----------------------------------------------------------------------------------------------------------------
     # DEFINE MODEL
@@ -258,6 +266,7 @@ class Word2Doc:
             """Applies dropout, but only if we are in training."""
             return tf.cond(tf.greater(mode, tf.constant(0)), lambda: tensor, lambda: tf.nn.dropout(tensor, dropout_value))
 
+        n_input = self.hyper_params['n_input']
         n_embedding = self.hyper_params['n_embedding']
         n_docs = self.hyper_params['n_classes']
         n_context = self.hyper_params['n_context_docs']
@@ -268,7 +277,7 @@ class Word2Doc:
             # embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
@@ -448,13 +457,20 @@ class Word2Doc:
     # -----------------------------------------------------------------------------------------------------------------
 
     def train(self, eval=True):
-        data_name = "2-wpp.npy"
-        model_name = "word2doc_model_200_100e_10ctx_dropout"
+        data_name = "3-wpp.npy"
+        model_name = "word2doc_model_5000_100e_10ctx_dropout_v2"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
         # Load data
         target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), data_name))
+
+        if eval:
+            target_eval, embeddings_eval, context_eval, titles_eval = self.load_test_data(
+                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+            context_eval = self.normalize_test_context(context, context_eval)
+            eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
+
         context = self.normalize_context(context)
 
         # Shuffle data
@@ -488,7 +504,7 @@ class Word2Doc:
 
             # Config embeddings projector
             embedding = config.embeddings.add()
-            doc_embeddings = tf.get_variable("doc_embeddings", [2000, 512], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, 512], dtype=tf.float32)
             embedding.tensor_name = doc_embeddings.name
 
             self.logger.info("Starting training..")
@@ -518,7 +534,7 @@ class Word2Doc:
                         pbar.update()
 
                         # Perform eval every nth step
-                        if counter % 10 == 0:
+                        if counter % 20 == 0:
 
                             # Eval using training data
                             feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [1]}
@@ -527,7 +543,9 @@ class Word2Doc:
 
                             # Eval using testing data
                             if eval:
-                                feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [2]}
+                                index = randint(0, len(eval_batches) - 1)
+                                x, c, y = zip(*eval_batches[index])
+                                feed = {inputs_pl: x, context_pl: c, labels_pl: y, mode_pl: [2]}
                                 summary_eval, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
                                 writer.add_summary(summary_eval, epoch * num_batches + counter)
 
@@ -586,13 +604,15 @@ class Word2Doc:
         with tf.Session(graph=graph) as sess:
             self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
 
+            num_batches = self.get_num_batches(embeddings)
+
             # Set batch size to 1 if we are using hand picked test set
             if mode == 2:
-                self.hyper_params['batch_size'] = 1
+                batches = self.get_batches(embeddings, context, target)
                 self.hyper_params['eval_fraction'] = 1
+            else:
+                batches = self.get_eval_batches(embeddings, context, target)
 
-            num_batches = self.get_num_batches(embeddings)
-            batches = self.get_batches(embeddings, context, target)
             n_eval = int(num_batches * self.hyper_params['eval_fraction'])
 
             self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
