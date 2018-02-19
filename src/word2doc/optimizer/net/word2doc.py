@@ -34,7 +34,7 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 10,
+            'epochs': 250,
             'batch_size': 512,
             'eval_batch_size': 1,
             'n_input': 4096,
@@ -456,7 +456,7 @@ class Word2Doc:
     # DEFINE SESSIONS
     # -----------------------------------------------------------------------------------------------------------------
 
-    def train(self, eval=True):
+    def train(self, eval=False):
         data_name = "3-wpp.npy"
         model_name = "word2doc_model_5000_100e_10ctx_dropout_v2"
         model_id = str(int(round(time.time())))
@@ -559,24 +559,25 @@ class Word2Doc:
             projector.visualize_embeddings(writer, config)
 
     def eval(self):
-        self.eval_impl(1)
+        self.eval_impl(mode=1)
 
-        # total_acc = 0
-        # for i in range(0, 10):
-        #     total_acc += self.eval_impl("test")
-        #
-        # self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
+        total_acc = 0
+        for i in range(0, 10):
+            total_acc += self.eval_impl(mode=2)
+
+        self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
 
     def eval_impl(self, mode):
 
         # Load training data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '2-wpp.npy'))
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
         if mode == 2:
             # Load testing data instead
             target, embeddings, context_test, titles = self.load_test_data(
                 os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
             context = self.normalize_test_context(context, context_test)
+            self.hyper_params['batch_size'] = 1
         else:
             context = self.normalize_context(context)
 
@@ -602,16 +603,16 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_200_100e_10ctx_dropout"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx_dropout_v2"))
 
             num_batches = self.get_num_batches(embeddings)
 
             # Set batch size to 1 if we are using hand picked test set
             if mode == 2:
-                batches = self.get_batches(embeddings, context, target)
+                batches = self.get_eval_batches(embeddings, context, target)
                 self.hyper_params['eval_fraction'] = 1
             else:
-                batches = self.get_eval_batches(embeddings, context, target)
+                batches = self.get_batches(embeddings, context, target)
 
             n_eval = int(num_batches * self.hyper_params['eval_fraction'])
 
@@ -631,7 +632,12 @@ class Word2Doc:
 
                     # for b in batch[1]:
                     # shuffle(b)
-                    feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2]}
+                    if mode == 2:
+                        x, c, y = zip(*batch)
+                    else:
+                        x, c, y = batch[0], batch[1], batch[2]
+
+                    feed = {inputs_pl: x, context_pl: c, labels_pl: y}
                     summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
 
                     # Update state
