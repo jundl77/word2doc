@@ -289,22 +289,27 @@ class Word2Doc:
             """Applies dropout, but only if we are in training."""
             return tf.cond(tf.greater(mode, tf.constant(0)), lambda: tensor, lambda: tf.nn.dropout(tensor, dropout_value))
 
+        n_input = self.hyper_params['n_input']
         n_embedding = self.hyper_params['n_embedding']
         n_docs = self.hyper_params['n_classes']
         n_context = self.hyper_params['n_context_docs']
 
         with tf.variable_scope('net'):
             # Input embedding
-            embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
-            embedded_input = __apply_dropout(mode, embedded_input, 0.3)
+            # embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
+            # embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
-            embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
+            embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context,
+                                      dtype=tf.float32)
 
             # Contact layers
-            concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
-            embb_dim = n_embedding * (n_context + 1)
+            exp_dim_inputs = tf.expand_dims(inputs, axis=1)
+            input_reshaped = tf.reshape(exp_dim_inputs,
+                                        [tf.shape(exp_dim_inputs)[0], int(n_input / n_embedding), n_embedding])
+            concat_embb = tf.concat([embedded_docs, input_reshaped], axis=1)
+            embb_dim = (n_embedding * n_context) + n_input
             concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
             concat_embb = __apply_dropout(mode, concat_embb, 0.3)
 
