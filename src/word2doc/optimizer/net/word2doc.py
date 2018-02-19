@@ -10,6 +10,7 @@ import prettytable
 import tensorflow as tf
 from tensorflow.contrib.tensorboard.plugins import projector
 
+from word2doc.retriever.doc_db import DocDB
 from word2doc.util import constants
 from word2doc.util import logger
 
@@ -28,14 +29,16 @@ class Word2Doc:
     def __init__(self):
         self.logger = logger.get_logger()
         self.saver = None
+        self.doc_db = DocDB(constants.get_db_path())
 
         self.hyper_params = {
             'TIME': '',
+            'MODEL': '',
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 250,
-            'batch_size': 512,
+            'epochs': 100,
+            'batch_size': 64,
             'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -50,14 +53,15 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 5000,
+            'n_classes': 200,
             'out_activation': 'softmax',
         }
 
         self.predict_model = self.model_predict()
 
-    def log_hyper_params(self, id):
+    def log_hyper_params(self, id, name):
         self.hyper_params['TIME'] = id
+        self.hyper_params['MODEL'] = name
         table = prettytable.PrettyTable(['Hyper Parameter', 'Value'])
 
         for key, val in self.hyper_params.items():
@@ -131,8 +135,26 @@ class Word2Doc:
 
         return np.asarray(ctx)
 
+    def create_embedding_labels_file(self, model_name, embb_titles, embb_length):
+        content = ''
+        for title in embb_titles.values():
+            content += title + "\n"
+
+        for i in range(0, embb_length - len(embb_titles)):
+            content += "NULL" + "\n"
+
+        # Save for TensorBoard
+        with open(os.path.join(constants.get_tensorboard_path(), model_name + ".tsv"), "w") as text_file:
+            text_file.write(content)
+
+        # Save for Model
+        with open(os.path.join(constants.get_word2doc_dir(), model_name + ".tsv"), "w") as text_file:
+            text_file.write(content)
+
     def normalize_context(self, ctx):
         ctx = list(ctx)
+        doc_titles = self.doc_db.get_doc_ids()
+        ctx_titles = {}
 
         i = 0
         mapping = {}
@@ -140,6 +162,7 @@ class Word2Doc:
             for num in context:
                 if num not in mapping:
                     mapping[num] = i
+                    ctx_titles[i] = doc_titles[num]
                     i += 1
 
         i = 0
@@ -147,7 +170,7 @@ class Word2Doc:
             ctx[i] = list(map(lambda n: mapping[n], context))
             i += 1
 
-        return ctx
+        return ctx, ctx_titles
 
     def normalize_test_context(self, old_ctx, new_ctx):
         """Map testing context docs to the domain of the training context docs
@@ -276,7 +299,7 @@ class Word2Doc:
             embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
@@ -454,8 +477,8 @@ class Word2Doc:
     # -----------------------------------------------------------------------------------------------------------------
 
     def train(self, eval=False):
-        data_name = "3-wpp.npy"
-        model_name = "word2doc_model_5000_100e_10ctx_dropout_v2"
+        data_name = "2-wpp.npy"
+        model_name = "word2doc_model_200_100e_10ctx_dropout_v2"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -468,7 +491,7 @@ class Word2Doc:
             context_eval = self.normalize_test_context(context, context_eval)
             eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
 
-        context = self.normalize_context(context)
+        context, ctx_titles = self.normalize_context(context)
 
         # Shuffle data
         self.logger.info('Shuffling data..')
@@ -479,7 +502,7 @@ class Word2Doc:
         model = self.model_train()
 
         self.logger.info('Training model with hyper params:')
-        self.log_hyper_params(model_id)
+        self.log_hyper_params(model_id, model_name)
 
         # Extract relevant objects from tf model
         graph = model['graph']
@@ -501,8 +524,7 @@ class Word2Doc:
 
             # Config embeddings projector
             embedding = config.embeddings.add()
-            doc_embeddings = tf.get_variable("doc_embeddings", [47000, 512], dtype=tf.float32)
-            embedding.tensor_name = doc_embeddings.name
+            embedding.tensor_name = "doc_embeddings"
 
             self.logger.info("Starting training..")
 
@@ -531,7 +553,7 @@ class Word2Doc:
                         pbar.update()
 
                         # Perform eval every nth step
-                        if counter % 20 == 0:
+                        if counter % 10 == 0:
 
                             # Eval using training data
                             feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [1]}
@@ -548,11 +570,13 @@ class Word2Doc:
 
                         # Save every nth step
                         if counter % 100 == 0:
-                            self.saver.save(sess, os.path.join(log_path, model_name))
+                            self.saver.save(sess, os.path.join(constants.get_tensorboard_path(), model_name))
 
             # Save once for TensorBoard embeddings projector, and once for easy reuse
-            self.saver.save(sess, os.path.join(log_path, model_name))
+            self.saver.save(sess, os.path.join(constants.get_tensorboard_path(), model_name))
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
+
+            self.create_embedding_labels_file(model_name, ctx_titles, 2000)
             projector.visualize_embeddings(writer, config)
 
     def eval(self):

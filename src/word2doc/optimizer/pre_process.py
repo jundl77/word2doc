@@ -67,7 +67,7 @@ class SquadPreprocessor:
         # Load bin data
         bin_data = np.load(bin_path)
 
-        queries = {} # Only the kept queries
+        queries = {}  # Only the kept queries
         seen_questions = []
 
         query_error_count = 0
