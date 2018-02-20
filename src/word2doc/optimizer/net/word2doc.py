@@ -9,6 +9,7 @@ import numpy as np
 import prettytable
 import tensorflow as tf
 from tensorflow.contrib.tensorboard.plugins import projector
+from tensorflow.contrib import slim
 
 from word2doc.retriever.doc_db import DocDB
 from word2doc.util import constants
@@ -49,7 +50,7 @@ class Word2Doc:
             'LEARNING RATE': '',
             ' ': '',
             'EMBEDDING LAYER': '',
-            'n_embedding': 512,
+            'n_embedding': 4096,
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
@@ -284,6 +285,8 @@ class Word2Doc:
 
     def __model_net(self, inputs, context, mode):
         """Define the net here."""
+        def zip_tensor(tensor):
+            return tf.reduce_sum(tensor)
 
         def __apply_dropout(mode, tensor, dropout_value):
             """Applies dropout, but only if we are in training."""
@@ -295,38 +298,44 @@ class Word2Doc:
         n_context = self.hyper_params['n_context_docs']
 
         with tf.variable_scope('net'):
-            # Input embedding
-            # embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
-            # embedded_input = __apply_dropout(mode, embedded_input, 0.3)
-
-            # Context embeddings
+            # Get document embeddings
             doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context,
                                       dtype=tf.float32)
 
-            # Contact layers
-            exp_dim_inputs = tf.expand_dims(inputs, axis=1)
-            input_reshaped = tf.reshape(exp_dim_inputs,
-                                        [tf.shape(exp_dim_inputs)[0], int(n_input / n_embedding), n_embedding])
-            concat_embb = tf.concat([embedded_docs, input_reshaped], axis=1)
-            embb_dim = (n_embedding * n_context) + n_input
-            concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
-            concat_embb = __apply_dropout(mode, concat_embb, 0.3)
+            # Contact layers to create matrix over which to run convolutions
+            inputs_deep = tf.reshape(inputs, [tf.shape(inputs)[0], 1, n_input])
+            inputs_deep = tf.tile(inputs_deep, [1, 10, 1])
+            input_embb_pairs = tf.stack([embedded_docs, inputs_deep], axis=1)
+            input_embb_pairs = tf.reshape(input_embb_pairs, [tf.shape(input_embb_pairs)[0], n_embedding, n_context * 2, 1])
 
-            # Merge layer
-            merged_layer = tf.layers.dense(concat_embb, n_embedding, activation=tf.nn.relu, use_bias=True)
-            merged_layer = __apply_dropout(mode, merged_layer, 0.3)
+            # Conv and Pool Layers
+            conv1 = tf.layers.conv2d(input_embb_pairs, filters=64, kernel_size=[512, 2], padding="valid", activation=tf.nn.relu)
+            pool1 = tf.layers.max_pooling2d(conv1, pool_size=[256, 2], strides=2)
+            conv2 = tf.layers.conv2d(pool1, filters=128, kernel_size=[256, 2], padding="valid", activation=tf.nn.relu)
+            pool2 = tf.layers.max_pooling2d(conv2, pool_size=[256, 2], strides=2)
+            conv3 = tf.layers.conv2d(pool2, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
+            conv4 = tf.layers.conv2d(conv3, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
+            conv5 = tf.layers.conv2d(conv4, filters=128, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
+            pool3 = tf.layers.max_pooling2d(conv5, pool_size=[128, 1], strides=2)
+
+            # Dense Layer
+            pool3_flat = tf.reshape(pool3, [-1, 35 * 128])
+            dense1 = tf.layers.dense(inputs=pool3_flat, units=1024, activation=tf.nn.relu)
+            dense1 = tf.layers.dropout(inputs=dense1, rate=0.4, training=tf.equal(mode, tf.constant(0)))
+            dense2 = tf.layers.dense(inputs=dense1, units=512, activation=tf.nn.relu)
+            dense2 = tf.layers.dropout(inputs=dense2, rate=0.4, training=tf.equal(mode, tf.constant(0)))
 
             # Output layer
             with tf.control_dependencies(None):
                 with tf.name_scope("softmax_weights"):
-                    softmax_w = tf.Variable(tf.truncated_normal((n_docs, n_embedding)))
+                    softmax_w = tf.Variable(tf.truncated_normal((n_docs, 512)))
                 with tf.name_scope("softmax_biases"):
                     softmax_b = tf.Variable(tf.zeros(n_docs), name="softmax_bias")
 
         self.saver = tf.train.Saver()
 
-        return merged_layer, softmax_w, softmax_b
+        return dense2, softmax_w, softmax_b
 
     def __negative_sampling(self, softmax_w, softmax_b, labels, merged_layer):
         """Perform negative sampling and then apply the optimizer. This is for training only."""
