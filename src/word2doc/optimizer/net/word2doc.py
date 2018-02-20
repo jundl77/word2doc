@@ -310,21 +310,21 @@ class Word2Doc:
             input_embb_pairs = tf.reshape(input_embb_pairs, [tf.shape(input_embb_pairs)[0], n_embedding, n_context * 2, 1])
 
             # Conv and Pool Layers
-            conv1 = tf.layers.conv2d(input_embb_pairs, filters=64, kernel_size=[512, 2], padding="valid", activation=tf.nn.relu)
-            pool1 = tf.layers.max_pooling2d(conv1, pool_size=[256, 2], strides=2)
-            conv2 = tf.layers.conv2d(pool1, filters=128, kernel_size=[256, 2], padding="valid", activation=tf.nn.relu)
-            pool2 = tf.layers.max_pooling2d(conv2, pool_size=[256, 2], strides=2)
-            conv3 = tf.layers.conv2d(pool2, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
-            conv4 = tf.layers.conv2d(conv3, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
-            conv5 = tf.layers.conv2d(conv4, filters=128, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
-            pool3 = tf.layers.max_pooling2d(conv5, pool_size=[128, 1], strides=2)
+            conv1 = tf.layers.conv2d(input_embb_pairs, filters=64, kernel_size=[4096, 2], padding="valid", activation=tf.nn.relu)
+            pool1 = tf.layers.max_pooling2d(conv1, pool_size=[1, 8], strides=2)
+            # conv2 = tf.layers.conv2d(pool1, filters=128, kernel_size=[1024, 8], padding="valid", activation=tf.nn.relu)
+            # pool2 = tf.layers.max_pooling2d(conv2, pool_size=[350, 2], strides=2)
+            # conv3 = tf.layers.conv2d(pool2, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
+            # conv4 = tf.layers.conv2d(conv3, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
+            # conv5 = tf.layers.conv2d(conv4, filters=128, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
+            # pool3 = tf.layers.max_pooling2d(conv5, pool_size=[128, 1], strides=2)
 
             # Dense Layer
-            pool3_flat = tf.reshape(pool3, [-1, 35 * 128])
-            dense1 = tf.layers.dense(inputs=pool3_flat, units=1024, activation=tf.nn.relu)
-            dense1 = tf.layers.dropout(inputs=dense1, rate=0.4, training=tf.equal(mode, tf.constant(0)))
-            dense2 = tf.layers.dense(inputs=dense1, units=512, activation=tf.nn.relu)
-            dense2 = tf.layers.dropout(inputs=dense2, rate=0.4, training=tf.equal(mode, tf.constant(0)))
+            pool_flat = tf.reshape(pool1, [-1, 8 * 64])
+            dense = tf.layers.dense(inputs=pool_flat, units=512, activation=tf.nn.relu)
+            dense = tf.layers.dropout(inputs=dense, rate=0.4, training=tf.equal(mode, tf.constant(0)))
+            #dense2 = tf.layers.dense(inputs=dense1, units=512, activation=tf.nn.relu)
+            #dense2 = tf.layers.dropout(inputs=dense2, rate=0.4, training=tf.equal(mode, tf.constant(0)))
 
             # Output layer
             with tf.control_dependencies(None):
@@ -335,7 +335,7 @@ class Word2Doc:
 
         self.saver = tf.train.Saver()
 
-        return dense2, softmax_w, softmax_b
+        return dense, softmax_w, softmax_b
 
     def __negative_sampling(self, softmax_w, softmax_b, labels, merged_layer):
         """Perform negative sampling and then apply the optimizer. This is for training only."""
