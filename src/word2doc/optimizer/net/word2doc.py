@@ -38,8 +38,8 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 100,
-            'batch_size': 64,
+            'epochs': 200,
+            'batch_size': 512,
             'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -54,7 +54,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 200,
+            'n_classes': 5000,
             'out_activation': 'softmax',
         }
 
@@ -227,8 +227,8 @@ class Word2Doc:
 
         return x, y, c
 
-    def get_num_batches(self, embeddings):
-        batches = np.array_split(embeddings, int(len(embeddings) / self.hyper_params['batch_size']))
+    def get_num_batches(self, embeddings, batch_size):
+        batches = np.array_split(embeddings, int(len(embeddings) / batch_size))
         return len(batches)
 
     def get_batches(self, embeddings, context, target):
@@ -311,7 +311,7 @@ class Word2Doc:
 
             # Conv and Pool Layers
             conv1 = tf.layers.conv2d(input_embb_pairs, filters=64, kernel_size=[4096, 2], padding="valid", activation=tf.nn.relu)
-            pool1 = tf.layers.max_pooling2d(conv1, pool_size=[1, 8], strides=2)
+            pool1 = tf.layers.max_pooling2d(conv1, pool_size=[1, 4], strides=2)
             # conv2 = tf.layers.conv2d(pool1, filters=128, kernel_size=[1024, 8], padding="valid", activation=tf.nn.relu)
             # pool2 = tf.layers.max_pooling2d(conv2, pool_size=[350, 2], strides=2)
             # conv3 = tf.layers.conv2d(pool2, filters=256, kernel_size=[128, 2], padding="valid", activation=tf.nn.relu)
@@ -491,8 +491,8 @@ class Word2Doc:
     # -----------------------------------------------------------------------------------------------------------------
 
     def train(self, eval=False):
-        data_name = "2-wpp.npy"
-        model_name = "word2doc_model_200_100e_10ctx_dropout_v2"
+        data_name = "3-wpp.npy"
+        model_name = "word2doc_model_5000_covnet"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -548,7 +548,7 @@ class Word2Doc:
                 self.logger.info("Epoch " + str(epoch) + "/" + str(self.hyper_params['epochs']))
 
                 counter = 0
-                num_batches = self.get_num_batches(embeddings)
+                num_batches = self.get_num_batches(embeddings, self.hyper_params['batch_size'])
                 with tqdm(total=num_batches) as pbar:
                     for batch in tqdm(batches):
 
@@ -590,31 +590,36 @@ class Word2Doc:
             self.saver.save(sess, os.path.join(constants.get_tensorboard_path(), model_name))
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
 
-            self.create_embedding_labels_file(model_name, ctx_titles, 2000)
+            self.create_embedding_labels_file(model_name, ctx_titles, 47000)
             projector.visualize_embeddings(writer, config)
 
     def eval(self):
-        self.eval_impl(mode=1)
+        data_name = "3-wpp.npy"
+        data_test_name="word2doc-test-bin-3.npy"
+        model_name = "word2doc_model_5000_covnet"
+
+        self.eval_impl(data_name, data_test_name, model_name, mode=1)
 
         total_acc = 0
         for i in range(0, 10):
-            total_acc += self.eval_impl(mode=2)
+            total_acc += self.eval_impl(data_name, data_test_name, model_name, mode=2)
 
         self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
 
-    def eval_impl(self, mode):
+    def eval_impl(self, data_name, data_test_name, model_name, mode):
 
         # Load training data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), data_name))
 
         if mode == 2:
             # Load testing data instead
             target, embeddings, context_test, titles = self.load_test_data(
-                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+                os.path.join(constants.get_word2doc_dir(), data_test_name))
             context = self.normalize_test_context(context, context_test)
-            self.hyper_params['batch_size'] = 1
+            num_batches = self.get_num_batches(embeddings, self.hyper_params['eval_batch_size'])
         else:
-            context = self.normalize_context(context)
+            num_batches = self.get_num_batches(embeddings, self.hyper_params['batch_size'])
+            context = self.normalize_context(context)[0]
 
         # Shuffle data
         self.logger.info('Shuffling data..')
@@ -626,7 +631,7 @@ class Word2Doc:
         model_id = str(int(round(time.time()))) + "_eval"
 
         self.logger.info('Evaluating model..')
-        self.log_hyper_params(model_id)
+        self.log_hyper_params(model_id, model_name)
 
         # Extract relevant objects from tf model
         graph = model['graph']
@@ -638,9 +643,7 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx_dropout_v2"))
-
-            num_batches = self.get_num_batches(embeddings)
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), model_name))
 
             # Set batch size to 1 if we are using hand picked test set
             if mode == 2:
