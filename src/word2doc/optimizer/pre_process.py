@@ -189,29 +189,7 @@ class Word2DocPreprocessor:
 
         self.__create_bins(constants.get_word2doc_dir(), num_bins)
 
-    def __create_bins(self, path, num_bins):
-
-        self.logger.info('Creating bins for ' + path)
-
-        # Create word2doc folder
-        if not os.path.exists(constants.get_word2doc_dir()):
-            os.makedirs(constants.get_word2doc_dir())
-        else:
-            self.logger.info('Bins already exist, stopping.')
-            return
-
-        # Load data
-        doc_titles = self.doc_db.get_doc_ids()
-        data_split = np.array_split(doc_titles, num_bins)
-
-        # Save data to bins
-        counter = 1
-        for b in data_split:
-            name = os.path.join(path, str(counter) + '.npy')
-            np.save(name, b)
-            counter += 1
-
-    def pre_process(self, bin_id):
+    def pre_process(self, bin_id, num_bins):
 
         doc_titles = self.doc_db.get_doc_ids()
 
@@ -220,15 +198,19 @@ class Word2DocPreprocessor:
         freq_error_count = 0
         counter = 0
 
+        bin_size = round(len(doc_titles) / num_bins)
+        index_start = bin_size * (bin_id - 1)
+        index_end = index_start + bin_size
+
+        # Make sure that any remaining objects are not ignored at the end by an imperfect bin size
+        if len(doc_titles) - index_end < bin_size:
+            index_end = len(doc_titles)
+
+        doc_titles_bin = doc_titles[index_start:index_end]
+
         self.logger.info('Creating pivot embeddings for docs...')
-        with tqdm(total=len(doc_titles)) as pbar:
-            for doc in tqdm(doc_titles):
-
-                index = randint(0, len(doc_titles) - 1)
-                doc = doc_titles[index]
-
-                if counter >= 25000:
-                    break
+        with tqdm(total=len(doc_titles_bin)) as pbar:
+            for doc in tqdm(doc_titles_bin):
 
                 clean_title = ''.join(e for e in doc.lower() if e.isalnum() or e == ' ')
 
