@@ -38,12 +38,9 @@ def handle_model_type(args):
 
     elif args.model_type == 'word2doc':
         # Pre-processor
-        if args.model_action == 'create-bins':
+        if args.model_action == 'pre-process':
             pre_processor = pre_process.Word2DocPreprocessor()
-            pre_processor.create_bins(args.num_bins)
-        elif args.model_action == 'pre-process':
-            pre_processor = pre_process.Word2DocPreprocessor()
-            pre_processor.pre_process(args.bin_id)
+            pre_processor.pre_process(args.bin_id, args.num_bins)
         elif args.model_action == 'merge-bins':
             pre_processor = pre_process.Word2DocPreprocessor()
             pre_processor.merge_bins(args.num_bins)
