@@ -17,6 +17,15 @@ from word2doc.optimizer.net.word2doc import Word2Doc
 logger = logger.get_logger()
 
 
+def pre_process_loop(args, pre_processor):
+    loop_interval = (args.bin_id - 1) * int(args.num_bins / args.num_workers)
+    start_bin = 1 + loop_interval
+    end_bin = 10 + loop_interval
+
+    for i in range(start_bin, end_bin):
+        pre_processor.pre_process(i, args.num_bins)
+
+
 def handle_model_type(args):
     if args.model_type == 'squad':
         # Pre-processor
@@ -40,7 +49,7 @@ def handle_model_type(args):
         # Pre-processor
         if args.model_action == 'pre-process':
             pre_processor = pre_process.Word2DocPreprocessor()
-            pre_processor.pre_process(args.bin_id, args.num_bins)
+            pre_process_loop(args, pre_processor)
         elif args.model_action == 'merge-bins':
             pre_processor = pre_process.Word2DocPreprocessor()
             pre_processor.merge_bins(args.num_bins)
