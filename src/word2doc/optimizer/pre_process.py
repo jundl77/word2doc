@@ -310,7 +310,7 @@ class Word2DocPreprocessor:
 
         data = {}
         # Load data from bins
-        for i in range(1, num_bins) :
+        for i in range(1, num_bins):
             bin_path = os.path.join(path, str(i) + '-pp.npy')
             bin_data = np.load(bin_path)
             squad_dict = np.ndarray.tolist(bin_data)
