@@ -27,16 +27,6 @@ def pre_process_loop(args, pre_processor):
         pre_processor.pre_process(i, args.num_bins)
 
 
-def pre_process_loop(args, pre_processor):
-    loop_interval = int(args.num_bins / args.num_workers)
-    loop_offset = (args.bin_id - 1) * loop_interval
-    start_bin = 1 + loop_offset
-    end_bin = loop_interval + loop_offset
-
-    for i in range(start_bin, end_bin + 1):
-        pre_processor.pre_process(i, args.num_bins)
-
-
 def handle_model_type(args):
     if args.model_type == 'squad':
         # Pre-processor

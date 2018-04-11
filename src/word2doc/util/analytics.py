@@ -33,13 +33,21 @@ class Analytics:
         self.n_pp_queries = total
         self.n_pp_queries_error = n_error
         self.n_pp_queries_duplicate = n_duplicate
-        self.pp_queries_accuracy = float(total - n_duplicate - n_error) / float(total - n_duplicate)
+
+        if total - n_duplicate == 0:
+            self.pp_queries_accuracy = -1
+        else:
+            self.pp_queries_accuracy = float(total - n_duplicate - n_error) / float(total - n_duplicate)
 
     def docs_processed(self, total, n_error, n_invalid):
         self.n_pp_queries = total
         self.n_pp_queries_error = n_error
         self.n_pp_queries_invalid = n_invalid
-        self.pp_queries_accuracy = float(total - n_invalid - n_error) / float(total - n_invalid)
+
+        if total - n_invalid == 0:
+            self.pp_queries_accuracy = -1
+        else:
+            self.pp_queries_accuracy = float(total - n_invalid - n_error) / float(total - n_invalid)
 
     def reference_graph_analytics(self, original_docs, filtered_docs):
         self.rg_changes.append(len(original_docs) - len(filtered_docs))

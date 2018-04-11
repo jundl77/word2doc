@@ -311,12 +311,12 @@ class Word2DocPreprocessor:
         data = {}
         # Load data from bins
         for i in range(1, num_bins):
-            bin_path = os.path.join(path, str(i) + '-pp.npy')
+            bin_path = os.path.join(path, str(i) + '-wpp.npy')
             bin_data = np.load(bin_path)
-            squad_dict = np.ndarray.tolist(bin_data)
+            list_data = np.ndarray.tolist(bin_data)
 
             # Append bin to all data
-            data.update(squad_dict)
+            data = np.append(data, list_data)
 
         self.logger.info('Done.')
         name = os.path.join(path, 'word2doc-pp.npy')
