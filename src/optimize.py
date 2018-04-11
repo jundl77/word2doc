@@ -24,7 +24,7 @@ def pre_process_loop(args, pre_processor):
     end_bin = loop_interval + loop_offset
 
     for i in range(start_bin, end_bin + 1):
-       pre_processor.pre_process(i + 1, args.num_bins)
+        pre_processor.pre_process(i, args.num_bins)
 
     # if args.bin_id == 1:
     #     pre_processor.pre_process(10, args.num_bins)
