@@ -316,7 +316,10 @@ class Word2DocPreprocessor:
             list_data = np.ndarray.tolist(bin_data)
 
             # Append bin to all data
-            data = np.append(data, list_data)
+            if len(data) == 0:
+                data = list_data
+            else:
+                data = np.append(data, list_data)
 
         self.logger.info('Done.')
         name = os.path.join(path, 'word2doc-pp.npy')
