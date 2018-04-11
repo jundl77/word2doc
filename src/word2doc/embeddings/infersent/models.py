@@ -67,6 +67,9 @@ class BLSTMEncoder(nn.Module):
             emb = emb / sent_len.expand_as(emb)
         elif self.pool_type == "max":
             emb = torch.max(sent_output, 0)[0]
+            if emb.ndimension() == 3:
+                emb = emb.squeeze(0)
+                assert emb.ndimension() == 2
 
         return emb
 
@@ -750,16 +753,16 @@ class ConvNetEncoder(nn.Module):
         # batch, nhid, seqlen)
 
         sent = self.convnet1(sent)
-        u1 = torch.max(sent, 2)[0].squeeze(2)
+        u1 = torch.max(sent, 2)[0]
 
         sent = self.convnet2(sent)
-        u2 = torch.max(sent, 2)[0].squeeze(2)
+        u2 = torch.max(sent, 2)[0]
 
         sent = self.convnet3(sent)
-        u3 = torch.max(sent, 2)[0].squeeze(2)
+        u3 = torch.max(sent, 2)[0]
 
         sent = self.convnet4(sent)
-        u4 = torch.max(sent, 2)[0].squeeze(2)
+        u4 = torch.max(sent, 2)[0]
 
         emb = torch.cat((u1, u2, u3, u4), 1)
 
