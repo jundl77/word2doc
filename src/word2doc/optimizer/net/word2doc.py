@@ -545,11 +545,11 @@ class Word2Doc:
         acc_op = model['acc']
         summary_op = model['summary']
 
-        with tf.Session(graph=graph) as sess:
+        with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as sess:
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(log_path, sess.graph)
-            config = projector.ProjectorConfig()
+            config_tb = projector.ProjectorConfig()
 
             self.train_state['total_epochs'] = self.hyper_params['epochs']
 
@@ -557,7 +557,7 @@ class Word2Doc:
 
                 self.train_state['epoch'] = epoch
 
-                data_gen = self.load_train_data(constants.get_word2doc_dir())
+                data_gen = self.load_train_data("./data/w2d-test")
 
                 # Load data
                 for target, embeddings, context, titles in data_gen:
@@ -592,7 +592,7 @@ class Word2Doc:
                     sess.run(tf.global_variables_initializer())
 
                     # Config embeddings projector
-                    embedding = config.embeddings.add()
+                    embedding = config_tb.embeddings.add()
                     embedding.tensor_name = "doc_embeddings"
 
                     self.logger.info("Starting training..")
@@ -610,7 +610,7 @@ class Word2Doc:
                                 shuffle(b)
 
                             feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [0]}
-                            summary, _ = sess.run([summary_op, optimizer], feed_dict=feed)
+                            summary, op = sess.run([summary_op, optimizer], feed_dict=feed)
 
                             # Update train TensorBoard
                             writer.add_summary(summary, epoch * num_batches + counter)
@@ -644,7 +644,7 @@ class Word2Doc:
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
 
             self.create_embedding_labels_file(model_name, ctx_titles, 2000)
-            projector.visualize_embeddings(writer, config)
+            projector.visualize_embeddings(writer, config_tb)
 
     def eval(self):
         self.eval_impl(mode=1)
