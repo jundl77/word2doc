@@ -24,7 +24,8 @@ def pre_process_loop(args, pre_processor):
     end_bin = loop_interval + loop_offset
 
     for i in range(start_bin, end_bin + 1):
-        pre_processor.pre_process(i, args.num_bins)
+        #pre_processor.pre_process(i, args.num_bins)
+        print(i)
 
 
 def handle_model_type(args):
