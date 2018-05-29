@@ -111,7 +111,7 @@ class BLSTMEncoder(nn.Module):
         # create word_vec with k first glove vectors
         k = 0
         word_vec = {}
-        with open(self.glove_path) as f:
+        with open(self.glove_path, encoding="utf-8") as f:
             for line in f:
                 word, vec = line.split(' ', 1)
                 if k <= K:

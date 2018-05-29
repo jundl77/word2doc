@@ -33,6 +33,12 @@ class Word2Doc:
         self.logger = logger.get_logger()
         self.saver = None
         self.doc_db = DocDB(constants.get_db_path())
+        self.data_mapping = {}
+        self.ctx_data_mapping = {}
+        self.title_mapping = {}
+        self.mapping_counter = 0
+        self.ctx_mapping_counter = 0
+        self.doc_titles = self.doc_db.get_doc_ids()
 
         self.train_state = {
             'files_seen': [],
@@ -48,7 +54,7 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 1,
+            'epochs': 100,
             'batch_size': 64,
             'eval_batch_size': 1,
             'n_input': 4096,
@@ -100,10 +106,13 @@ class Word2Doc:
     def load_train_data(self, path):
         self.logger.info('Load training data: ' + path)
 
-        files = [f for f in self.iter_files(path)]
-        files = list(filter(lambda f: f.endswith("wpp.npy"), files))
+        if os.path.isdir(path):
+            files = [f for f in self.iter_files(path)]
+            files = list(filter(lambda f: f.endswith("wpp.npy"), files))
 
-        random.shuffle(files)
+            random.shuffle(files)
+        else:
+            files = [path]
 
         self.train_state['total_files'] = len(files)
 
@@ -124,10 +133,9 @@ class Word2Doc:
             embeddings = list()
             context = list()
 
-            doc_counter = 0
             for data_dict in data:
                 doc_id = data_dict['doc_index']
-                doc_id = doc_counter
+                doc_id = self.__map_data(doc_id)
                 titles[doc_id] = data_dict['doc_title']
                 ctx = data_dict['doc_window']
 
@@ -139,8 +147,6 @@ class Word2Doc:
 
                     # neg_ctx = self.negative_samples(data, ctx, 1)
                     context.append(self.fill_contexts(ctx))
-
-                doc_counter += 1
 
             yield labels, embeddings, context, titles
 
@@ -169,6 +175,14 @@ class Word2Doc:
 
         return labels, embeddings, context, titles
 
+    def __map_data(self, id):
+        if id in self.data_mapping:
+            return self.data_mapping[id]
+
+        self.data_mapping[id] = self.mapping_counter
+        self.mapping_counter += 1
+        return self.mapping_counter - 1
+
     def fill_contexts(self, ctx):
         while len(ctx) < 10:
             ctx.append(0)
@@ -187,55 +201,39 @@ class Word2Doc:
         with open(os.path.join(constants.get_tensorboard_path(), model_name + ".tsv"), "w") as text_file:
             text_file.write(content)
 
-        # Save for Model
+        # Save for model
         with open(os.path.join(constants.get_word2doc_dir(), model_name + ".tsv"), "w") as text_file:
             text_file.write(content)
 
     def normalize_context(self, ctx):
-        ctx = list(ctx)
-        doc_titles = self.doc_db.get_doc_ids()
-        ctx_titles = {}
-
-        i = 0
-        mapping = {}
-        for context in ctx:
-            for num in context:
-                if num not in mapping:
-                    mapping[num] = i
-                    ctx_titles[i] = doc_titles[num]
-                    i += 1
+        for sub_ctx in ctx:
+            for num in sub_ctx:
+                if num not in self.ctx_data_mapping:
+                    self.ctx_data_mapping[num] = self.ctx_mapping_counter
+                    self.title_mapping[self.ctx_mapping_counter] = self.doc_titles[num]
+                    self.ctx_mapping_counter += 1
 
         i = 0
         for context in ctx:
-            ctx[i] = list(map(lambda n: mapping[n], context))
+            ctx[i] = list(map(lambda n: self.ctx_data_mapping[n], context))
             i += 1
 
-        return ctx, ctx_titles
+        return ctx
 
-    def normalize_test_context(self, old_ctx, new_ctx):
+    def normalize_test_context(self, testing_ctx):
         """Map testing context docs to the domain of the training context docs
         (i.e. [0, 5M] -> [0, 47k] with 5k training samples"""
 
-        # Create mapping
-        old_ctx = list(old_ctx)
+        ctx = list(testing_ctx)
         i = 0
-        mapping = {}
-        for context in old_ctx:
-            for num in context:
-                if num not in mapping:
-                    mapping[num] = i
-                    i += 1
 
-        # Map testing context domain to training context domain
-        ctx = list(new_ctx)
-        i = 0
-        for context in new_ctx:
+        for context in testing_ctx:
 
             # Map if possible (sometimes documents are not in the training domain range, so they have to be duplicated)
             single_ctx = list()
             for num in context:
-                if num in mapping:
-                    single_ctx.append(mapping[num])
+                if num in self.ctx_data_mapping:
+                    single_ctx.append(self.ctx_data_mapping[num])
 
             # Filling up contexts with duplicates
             for z in range(0, 10 - len(single_ctx)):
@@ -523,8 +521,7 @@ class Word2Doc:
     # Memory profiling cannot be done in debug mode
     # @profile
     def train(self, eval=False):
-        data_name = "2-wpp.npy"
-        model_name = "word2doc_model_200_100e_10ctx_dropout_v2"
+        model_name = "word2doc_multi_file_test"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -545,7 +542,8 @@ class Word2Doc:
         acc_op = model['acc']
         summary_op = model['summary']
 
-        with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as sess:
+        #with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as sess:
+        with tf.Session(graph=graph) as sess:
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(log_path, sess.graph)
@@ -558,6 +556,11 @@ class Word2Doc:
                 self.train_state['epoch'] = epoch
 
                 data_gen = self.load_train_data("./data/w2d-test")
+
+                if eval:
+                    fake_data_gen = self.load_train_data("./data/w2d-test/3-wpp.npy")
+                    for target, embeddings, context, titles in fake_data_gen:
+                        a = target
 
                 # Load data
                 for target, embeddings, context, titles in data_gen:
@@ -579,10 +582,10 @@ class Word2Doc:
                     if eval:
                         target_eval, embeddings_eval, context_eval, titles_eval = self.load_test_data(
                             os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
-                        context_eval = self.normalize_test_context(context, context_eval)
+                        context_eval = self.normalize_test_context(context_eval)
                         eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
 
-                    context, ctx_titles = self.normalize_context(context)
+                    context = self.normalize_context(context)
 
                     # Shuffle data
                     self.logger.info('Shuffling data..')
@@ -643,7 +646,7 @@ class Word2Doc:
             self.saver.save(sess, os.path.join(constants.get_tensorboard_path(), model_name))
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
 
-            self.create_embedding_labels_file(model_name, ctx_titles, 2000)
+            self.create_embedding_labels_file(model_name, self.title_mapping, 2000)
             projector.visualize_embeddings(writer, config_tb)
 
     def eval(self):
