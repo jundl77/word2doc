@@ -544,12 +544,11 @@ class Word2Doc:
 
         #with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as sess:
         with tf.Session(graph=graph) as sess:
+            sess.run(tf.global_variables_initializer())
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(log_path, sess.graph)
             config_tb = projector.ProjectorConfig()
-
-            sess.run(tf.global_variables_initializer())
 
             # Config embeddings projector
             embedding = config_tb.embeddings.add()
