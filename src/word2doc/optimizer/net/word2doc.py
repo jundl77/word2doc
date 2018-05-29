@@ -549,6 +549,12 @@ class Word2Doc:
             writer = tf.summary.FileWriter(log_path, sess.graph)
             config_tb = projector.ProjectorConfig()
 
+            sess.run(tf.global_variables_initializer())
+
+            # Config embeddings projector
+            embedding = config_tb.embeddings.add()
+            embedding.tensor_name = "doc_embeddings"
+
             self.train_state['total_epochs'] = self.hyper_params['epochs']
 
             for epoch in range(1, self.hyper_params['epochs'] + 1):
@@ -592,11 +598,6 @@ class Word2Doc:
                     embeddings, context, target = self.shuffle_data(embeddings, context, target)
                     self.logger.info('Done shuffling data.')
 
-                    sess.run(tf.global_variables_initializer())
-
-                    # Config embeddings projector
-                    embedding = config_tb.embeddings.add()
-                    embedding.tensor_name = "doc_embeddings"
 
                     self.logger.info("Starting training..")
 
