@@ -38,7 +38,7 @@ class Word2Doc:
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
             'epochs': 100,
-            'batch_size': 64,
+            'batch_size': 128,
             'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -53,7 +53,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 200,
+            'n_classes': 5000,
             'out_activation': 'softmax',
         }
 
@@ -299,7 +299,7 @@ class Word2Doc:
             embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
@@ -476,9 +476,9 @@ class Word2Doc:
     # DEFINE SESSIONS
     # -----------------------------------------------------------------------------------------------------------------
 
-    def train(self, eval=False):
-        data_name = "2-wpp.npy"
-        model_name = "word2doc_model_200_100e_10ctx_dropout_v2"
+    def train(self, eval=True):
+        data_name = "3-wpp.npy"
+        model_name = "word2doc_test_old"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -600,19 +600,20 @@ class Word2Doc:
             context = self.normalize_test_context(context, context_test)
             self.hyper_params['batch_size'] = 1
         else:
-            context = self.normalize_context(context)
+            context, ctx_titles = self.normalize_context(context)
 
-        # Shuffle data
-        self.logger.info('Shuffling data..')
-        embeddings, context, target = self.shuffle_data(embeddings, context, target)
-        self.logger.info('Done shuffling data.')
+        if mode is not 2:
+            # Shuffle data
+            self.logger.info('Shuffling data..')
+            embeddings, context, target = self.shuffle_data(embeddings, context, target)
+            self.logger.info('Done shuffling data.')
 
         # Set up model
         model = self.model_eval()
         model_id = str(int(round(time.time()))) + "_eval"
 
         self.logger.info('Evaluating model..')
-        self.log_hyper_params(model_id)
+        self.log_hyper_params(model_id, "test")
 
         # Extract relevant objects from tf model
         graph = model['graph']
@@ -624,7 +625,7 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx_dropout_v2"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_tests_normal"))
 
             num_batches = self.get_num_batches(embeddings)
 
