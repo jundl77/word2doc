@@ -70,7 +70,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 200,
+            'n_classes': 5000,
             'out_activation': 'softmax',
         }
 
@@ -338,7 +338,7 @@ class Word2Doc:
             embedded_input = __apply_dropout(mode, embedded_input, 0.3)
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [2000, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context,
                                       dtype=tf.float32)
 
@@ -521,7 +521,8 @@ class Word2Doc:
     # Memory profiling cannot be done in debug mode
     # @profile
     def train(self, eval=False):
-        model_name = "word2doc_multi_file_test"
+        eval = True
+        model_name = "word2doc_tests_normal"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -565,7 +566,7 @@ class Word2Doc:
                 if eval:
                     fake_data_gen = self.load_train_data("./data/w2d-test/3-wpp.npy")
                     for target, embeddings, context, titles in fake_data_gen:
-                        a = target
+                        self.normalize_context(context)
 
                 # Load data
                 for target, embeddings, context, titles in data_gen:
@@ -596,7 +597,6 @@ class Word2Doc:
                     self.logger.info('Shuffling data..')
                     embeddings, context, target = self.shuffle_data(embeddings, context, target)
                     self.logger.info('Done shuffling data.')
-
 
                     self.logger.info("Starting training..")
 
@@ -660,30 +660,12 @@ class Word2Doc:
 
     def eval_impl(self, mode):
 
-        # Load training data
-        target, embeddings, context, titles = self.load_train_data(
-            os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
-
-        if mode == 2:
-            # Load testing data instead
-            target, embeddings, context_test, titles = self.load_test_data(
-                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
-            context = self.normalize_test_context(context, context_test)
-            self.hyper_params['batch_size'] = 1
-        else:
-            context = self.normalize_context(context)
-
-        # Shuffle data
-        self.logger.info('Shuffling data..')
-        embeddings, context, target = self.shuffle_data(embeddings, context, target)
-        self.logger.info('Done shuffling data.')
-
         # Set up model
         model = self.model_eval()
         model_id = str(int(round(time.time()))) + "_eval"
 
         self.logger.info('Evaluating model..')
-        self.log_hyper_params(model_id)
+        self.log_hyper_params(model_id, "test")
 
         # Extract relevant objects from tf model
         graph = model['graph']
@@ -695,60 +677,79 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess,
-                               os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx_dropout_v2"))
 
-            num_batches = self.get_num_batches(embeddings)
+            # Load training data
+            data_gen = self.load_train_data(
+                os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
-            # Set batch size to 1 if we are using hand picked test set
-            if mode == 2:
-                batches = self.get_eval_batches(embeddings, context, target)
-                self.hyper_params['eval_fraction'] = 1
-            else:
-                batches = self.get_batches(embeddings, context, target)
+            for target, embeddings, context, titles in data_gen:
+                context = self.normalize_context(context)
 
-            n_eval = int(num_batches * self.hyper_params['eval_fraction'])
+                if mode == 2:
+                    # Load testing data instead
+                    target, embeddings, context_test, titles = self.load_test_data(
+                        os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+                    context = self.normalize_test_context(context_test)
+                    self.hyper_params['batch_size'] = 1
 
-            self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
-                             str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
+                # Shuffle data
+                self.logger.info('Shuffling data..')
+                embeddings, context, target = self.shuffle_data(embeddings, context, target)
+                self.logger.info('Done shuffling data.')
 
-            total_acc = 0
-            total_loss = 0
+                self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx_dropout_v2"))
 
-            counter = 0
-            with tqdm(total=n_eval) as pbar:
-                for batch in tqdm(batches):
+                num_batches = self.get_num_batches(embeddings)
 
-                    # Only do X% of data
-                    if counter >= n_eval:
-                        break
+                # Set batch size to 1 if we are using hand picked test set
+                if mode == 2:
+                    batches = self.get_eval_batches(embeddings, context, target)
+                    self.hyper_params['eval_fraction'] = 1
+                else:
+                    batches = self.get_batches(embeddings, context, target)
 
-                    # for b in batch[1]:
-                    # shuffle(b)
-                    if mode == 2:
-                        x, c, y = zip(*batch)
-                    else:
-                        x, c, y = batch[0], batch[1], batch[2]
+                n_eval = int(num_batches * self.hyper_params['eval_fraction'])
 
-                    feed = {inputs_pl: x, context_pl: c, labels_pl: y}
-                    summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
+                                 str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
 
-                    # Update state
-                    total_loss += l
-                    total_acc += a
-                    counter += 1
-                    pbar.update()
+                total_acc = 0
+                total_loss = 0
 
-            total_loss = total_loss / counter
-            total_acc = total_acc / counter
+                counter = 0
+                with tqdm(total=n_eval) as pbar:
+                    for batch in tqdm(batches):
 
-            # Print results
-            if mode == 1:
-                self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
-            else:
-                self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
+                        # Only do X% of data
+                        if counter >= n_eval:
+                            break
 
-            return total_acc
+                        # for b in batch[1]:
+                        # shuffle(b)
+                        if mode == 2:
+                            x, c, y = zip(*batch)
+                        else:
+                            x, c, y = batch[0], batch[1], batch[2]
+
+                        feed = {inputs_pl: x, context_pl: c, labels_pl: y}
+                        summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+
+                        # Update state
+                        total_loss += l
+                        total_acc += a
+                        counter += 1
+                        pbar.update()
+
+                total_loss = total_loss / counter
+                total_acc = total_acc / counter
+
+                # Print results
+                if mode == 1:
+                    self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
+                else:
+                    self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
+
+                return total_acc
 
     def predict(self, x, c):
         model = self.predict_model
