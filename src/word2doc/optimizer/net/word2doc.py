@@ -37,8 +37,8 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 100,
-            'batch_size': 128,
+            'epochs': 70,
+            'batch_size': 100,
             'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -297,6 +297,7 @@ class Word2Doc:
             # Input embedding
             embedded_input = tf.layers.dense(inputs, n_embedding, activation=tf.nn.relu, use_bias=True)
             embedded_input = __apply_dropout(mode, embedded_input, 0.3)
+            merged_layer = embedded_input
 
             # Context embeddings
             doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
@@ -306,6 +307,7 @@ class Word2Doc:
             concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
             embb_dim = n_embedding * (n_context + 1)
             concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
+            # concat_embb = tf.reduce_mean(concat_embb, 1)
             concat_embb = __apply_dropout(mode, concat_embb, 0.3)
 
             # Merge layer
@@ -478,7 +480,7 @@ class Word2Doc:
 
     def train(self, eval=True):
         data_name = "3-wpp.npy"
-        model_name = "word2doc_test_old"
+        model_name = "word2doc_test_no_augment"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -569,7 +571,7 @@ class Word2Doc:
                                 writer.add_summary(summary_eval, epoch * num_batches + counter)
 
                         # Save every nth step
-                        if counter % 100 == 0:
+                        if counter % 50 == 0:
                             self.saver.save(sess, os.path.join(constants.get_tensorboard_path(), model_name))
 
             # Save once for TensorBoard embeddings projector, and once for easy reuse
@@ -583,7 +585,7 @@ class Word2Doc:
         self.eval_impl(mode=1)
 
         total_acc = 0
-        for i in range(0, 10):
+        for i in range(0, 100):
             total_acc += self.eval_impl(mode=2)
 
         self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
@@ -602,11 +604,10 @@ class Word2Doc:
         else:
             context, ctx_titles = self.normalize_context(context)
 
-        if mode is not 2:
-            # Shuffle data
-            self.logger.info('Shuffling data..')
-            embeddings, context, target = self.shuffle_data(embeddings, context, target)
-            self.logger.info('Done shuffling data.')
+        # Shuffle data
+        self.logger.info('Shuffling data..')
+        embeddings, context, target = self.shuffle_data(embeddings, context, target)
+        self.logger.info('Done shuffling data.')
 
         # Set up model
         model = self.model_eval()
@@ -625,7 +626,7 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_tests_normal"))
+            self.saver.restore(sess, os.path.join(constants.get_tensorboard_path(), "word2doc_test_concat"))
 
             num_batches = self.get_num_batches(embeddings)
 
