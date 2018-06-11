@@ -9,6 +9,7 @@ import code
 import prettytable
 from random import randint
 from word2doc.retriever.doc_db import DocDB
+import pprint
 import json
 import locale
 import os
@@ -53,13 +54,19 @@ class Word2DocTest:
         test_data = list()
         log = list()
 
-        _, _, old_context, titles = self.word2doc.load_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+        _, _, old_context, titles = self.word2doc.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
+
+        test_data_old = np.load(os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
 
         while total_counter < 200:
             try:
                 # Choose random document
                 index = randint(0, len(titles) - 1)
                 doc = titles[index]
+
+                for old_doc in test_data_old:
+                    if old_doc["doc_title"] == doc:
+                        continue
 
                 print("Run no. " + str(total_counter))
                 if total_counter > 0:
@@ -74,55 +81,66 @@ class Word2DocTest:
                 if skip == "y":
                     continue
 
+                valid = False
+                while not valid:
+                    category = input("Enter a category (1: normal, 2: typo, 3: abbreviation, 4: number): ")
+                    try:
+                        category = int(category)
+                        valid = True
+                    except ValueError:
+                        print("Invalid category.")
+
                 keyword = input("Create a keyword:\n")
-                self.logger.info("Evaluating " + keyword + "..")
-                res, data = self.eval(keyword, old_context, titles)
-
-                if res is None:
-                    continue
-
-                if res:
-                    prompt = False
-                    correct = False
-
-                    while not prompt:
-                        answer = input("Is the response correct? (y\\n)")
-
-                        if answer == "y":
-                            succ_counter += 1
-                            print("Saved success.")
-                            correct = True
-                            prompt = True
-                        elif answer == "n":
-                            err_counter += 1
-                            print("Saved error.")
-                            correct = False
-                            prompt = True
-                        else:
-                            print("Wrong input, try again (y\\n)")
-                else:
-                    err_counter += 1
-                    correct = False
-                    self.logger.info("Saved error.")
+                data = self.pre_process(keyword)
+                # self.logger.info("Evaluating " + keyword + "..")
+                # res, data = self.eval(data, old_context)
+                #
+                # if res is None:
+                #     continue
+                #
+                # if res:
+                #     prompt = False
+                #     correct = False
+                #
+                #     while not prompt:
+                #         answer = input("Is the response correct? (y\\n)")
+                #
+                #         if answer == "y":
+                #             succ_counter += 1
+                #             print("Saved success.")
+                #             correct = True
+                #             prompt = True
+                #         elif answer == "n":
+                #             err_counter += 1
+                #             print("Saved error.")
+                #             correct = False
+                #             prompt = True
+                #         else:
+                #             print("Wrong input, try again (y\\n)")
+                # else:
+                #     err_counter += 1
+                #     correct = False
+                #     self.logger.info("Saved error.")
 
                 test_data.append({
                     'doc_index': index,
                     'doc_title': doc,
-                    'query': data['keyword'],
+                    'category': category,
+                    'query': keyword,
                     'pivot_embeddings': data['pivot_embedding'],
                     'doc_window': data['doc_window']
                 })
 
-                log.append({
-                    "Tested document": doc,
-                    "User keyword": keyword,
-                    "Number of context docs removed": data['n_docs_rm'],
-                    "Correct": correct
-                })
+                # log.append({
+                #     "Tested document": doc,
+                #     "User keyword": keyword,
+                #     "Number of context docs removed": data['n_docs_rm'],
+                #     "Correct": correct
+                # })
                 total_counter += 1
 
                 # Save test data
-                name = os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy')
+                name = os.path.join(constants.get_word2doc_dir(), 'word2doc-test-400.npy')
                 np.save(name, test_data)
             except:
                 print("Error, continuing")
@@ -146,12 +164,12 @@ class Word2DocTest:
 
         self.logger.info("Accuracy over 200 randomly chosen documents: " + str(acc))
 
-    def eval(self, keyword, old_context, titles):
-        data = self.pre_process(keyword)
+    def eval(self, data, old_context):
         embb = data['pivot_embedding']
         ctx = data['doc_window']
 
         ctx, n_docs_rm = self.__normalize_context(old_context, ctx)
+        pp = pprint.PrettyPrinter(indent=2)
 
         if ctx is None:
             print("Not enough context docs found, skipping.")
@@ -160,16 +178,12 @@ class Word2DocTest:
         data['n_docs_rm'] = n_docs_rm
         data['doc_window'] = ctx
 
-        pred = self.word2doc.predict([embb], [ctx])
+        docs = self.word2doc.predict([embb], [ctx])
+        print("Documents found:")
+        pp.pprint(docs)
+        return True, data
 
-        if pred[0][0] in titles:
-            self.logger.info(u' '.join(("Closest document: ", titles[pred[0][0]])).encode('utf-8'))
-            return True, data
-        else:
-            self.logger.info("Document not found.")
-            return False, data
-
-    def pre_process(self, keyword):
+    def pre_process(self, keyword,):
         # Encode pivots as word embeddings using infersent
         pivots_embedding = self.infersent.encode(keyword)
 

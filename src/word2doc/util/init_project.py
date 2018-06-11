@@ -7,6 +7,7 @@
 
 import os
 import sys
+import locale
 
 from word2doc.util import constants
 
@@ -19,6 +20,7 @@ def init(num_workers):
     if num_workers is None:
         num_workers = 1
 
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
     constants.set_number_workers(num_workers)
 
 

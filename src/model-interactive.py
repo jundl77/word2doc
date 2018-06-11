@@ -7,12 +7,14 @@
 import argparse
 import code
 import prettytable
+import locale
 
 from word2doc import model
 from word2doc.util import logger
 from word2doc.util import init_project
 
 logger = logger.get_logger()
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('db_path', type=str, help='/path/to/db')

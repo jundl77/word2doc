@@ -30,6 +30,7 @@ class Word2Doc:
         self.logger = logger.get_logger()
         self.saver = None
         self.doc_db = DocDB(constants.get_db_path())
+        self.doc_titles = self.doc_db.get_doc_ids()
 
         self.hyper_params = {
             'TIME': '',
@@ -197,6 +198,11 @@ class Word2Doc:
                 if num in mapping:
                     single_ctx.append(mapping[num])
 
+            if len(single_ctx) == 0:
+                ctx[i] = -1
+                i += 1
+                continue
+
             # Filling up contexts with duplicates
             for z in range(0, 10 - len(single_ctx)):
                 index = randint(0, len(single_ctx) - 1)
@@ -206,6 +212,14 @@ class Word2Doc:
             i += 1
 
         return ctx
+
+    def filter_test_data(self, x, y, c):
+        zipped = list(zip(x, y, c))
+        zipped = list(filter(lambda x: not x[2] == -1, zipped))
+
+        x, y, c = zip(*zipped)
+
+        return x, y, c
 
     def negative_samples(self, data, doc_context, num):
         negative_samples = []
@@ -305,9 +319,9 @@ class Word2Doc:
 
             # Contact layers
             concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
-            embb_dim = n_embedding * (n_context + 1)
-            concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
-            # concat_embb = tf.reduce_mean(concat_embb, 1)
+            #embb_dim = n_embedding * (n_context + 1)
+            #concat_embb = tf.reshape(concat_embb, [tf.shape(concat_embb)[0], embb_dim])
+            concat_embb = tf.reduce_mean(concat_embb, 1)
             concat_embb = __apply_dropout(mode, concat_embb, 0.3)
 
             # Merge layer
@@ -372,6 +386,7 @@ class Word2Doc:
             labels_flat = tf.map_fn(lambda l: l[0], labels)
             correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
             val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+            #val_acc = tf.reduce_mean(tf.cast(tf.nn.in_top_k(predictions=logits, targets=labels_flat, k=10), tf.float32))
 
             # Add acc to TensorBoard
             acc_summary = __eval_summary(mode, "acc", val_acc)
@@ -460,7 +475,7 @@ class Word2Doc:
                 logits = tf.matmul(merged_layer, tf.transpose(softmax_w))
             with tf.name_scope("softmax_biases"):
                 logits = tf.nn.bias_add(logits, softmax_b)
-            pred = tf.argmax(logits, 1)
+            pred = tf.nn.top_k(logits, k=10, sorted=True)
 
             summary = tf.summary.merge_all()
 
@@ -582,10 +597,10 @@ class Word2Doc:
             projector.visualize_embeddings(writer, config)
 
     def eval(self):
-        self.eval_impl(mode=1)
+        #self.eval_impl(mode=1)
 
         total_acc = 0
-        for i in range(0, 100):
+        for i in range(0, 10):
             total_acc += self.eval_impl(mode=2)
 
         self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
@@ -598,8 +613,9 @@ class Word2Doc:
         if mode == 2:
             # Load testing data instead
             target, embeddings, context_test, titles = self.load_test_data(
-                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-400_numb.npy'))
             context = self.normalize_test_context(context, context_test)
+            embeddings, target, context = self.filter_test_data(embeddings, target, context)
             self.hyper_params['batch_size'] = 1
         else:
             context, ctx_titles = self.normalize_context(context)
@@ -626,7 +642,7 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_tensorboard_path(), "word2doc_test_concat"))
+            self.saver.restore(sess, os.path.join(constants.get_tensorboard_path(), "word2doc_test_avg"))
 
             num_batches = self.get_num_batches(embeddings)
 
@@ -686,11 +702,12 @@ class Word2Doc:
         graph = model['graph']
         inputs = model['inputs']
         context_pl = model['context']
-        pred_op = model['op']
+        pred_op = model['pred']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess,
-                               os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_2_200e_10ctx_dropout"))
+            self.saver.restore(sess, os.path.join(constants.get_tensorboard_path(), "word2doc_test_avg"))
 
             feed = {inputs: x, context_pl: c}
-            return sess.run([pred_op], feed_dict=feed)
+            results = sess.run([pred_op], feed_dict=feed)[0][1]
+
+            return list(map(lambda x: self.doc_titles[x], results[0]))
