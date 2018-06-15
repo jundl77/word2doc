@@ -54,7 +54,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 58170,
+            'n_classes': 5000,
             'out_activation': 'softmax',
         }
 
@@ -328,7 +328,7 @@ class Word2Doc:
             merged_layer = embedded_input
 
             # Context embeddings
-            doc_embeddings = tf.get_variable("doc_embeddings", [581700, n_embedding], dtype=tf.float32)
+            doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
             embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
 
             # Contact layers
@@ -400,7 +400,7 @@ class Word2Doc:
             labels_flat = tf.map_fn(lambda l: l[0], labels)
             #correct_prediction = tf.equal(tf.argmax(logits, 1), labels_flat)
             #val_acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            val_acc = tf.reduce_mean(tf.cast(tf.nn.in_top_k(predictions=logits, targets=labels_flat, k=10), tf.float32))
+            val_acc = tf.reduce_mean(tf.cast(tf.nn.in_top_k(predictions=logits, targets=labels_flat, k=5), tf.float32))
 
             # Add acc to TensorBoard
             acc_summary = __eval_summary(mode, "acc", val_acc)
@@ -623,7 +623,7 @@ class Word2Doc:
     def eval_impl(self, mode):
 
         # Load training data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '72t-wpp.npy'))
+        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
         context_train, ctx_titles = self.normalize_context(context)
 
         if mode == 2:
@@ -660,7 +660,7 @@ class Word2Doc:
         summary_op = model['summary']
 
         with tf.Session(graph=graph) as sess:
-            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_1p_72t"))
+            self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_test_avg"))
 
             num_batches = self.get_num_batches(embeddings)
 
