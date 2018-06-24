@@ -52,7 +52,7 @@ def calculate_rankings(query, k=10):
         print("Doc retrieved: " + doc)
 
     analytics = MODEL.get_analytics()
-    analytics.save_to_file()
+    #analytics.save_to_file()
     analytics.report()
 
 

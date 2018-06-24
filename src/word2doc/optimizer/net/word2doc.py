@@ -1,14 +1,16 @@
+import json
 import os
 import random
+import sys
 import time
-
-from random import shuffle
 from random import randint
-from tqdm import tqdm
+from random import shuffle
+
 import numpy as np
 import prettytable
 import tensorflow as tf
 from tensorflow.contrib.tensorboard.plugins import projector
+from tqdm import tqdm
 
 from word2doc.retriever.doc_db import DocDB
 from word2doc.util import constants
@@ -30,7 +32,20 @@ class Word2Doc:
         self.logger = logger.get_logger()
         self.saver = None
         self.doc_db = DocDB(constants.get_db_path())
+        self.data_mapping = {}
+        self.ctx_data_mapping = {}
+        self.title_mapping = {}
+        self.mapping_counter = 0
+        self.ctx_mapping_counter = 0
         self.doc_titles = self.doc_db.get_doc_ids()
+
+        self.train_state = {
+            'files_seen': [],
+            'file_seen_last': '',
+            'total_files': 0,
+            'epoch': 0,
+            'total_epochs': 0
+        }
 
         self.hyper_params = {
             'TIME': '',
@@ -38,8 +53,8 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 35,
-            'batch_size': 100,
+            'epochs': 100,
+            'batch_size': 64,
             'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -54,7 +69,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 5000,
+            'n_classes': 200,
             'out_activation': 'softmax',
         }
 
@@ -75,35 +90,64 @@ class Word2Doc:
         os.makedirs(path)
         return path
 
+    def iter_files(self, path):
+        """Walk through all files located under a root path."""
+        if os.path.isfile(path):
+            yield path
+        elif os.path.isdir(path):
+            for dirpath, _, filenames in os.walk(path):
+                for f in filenames:
+                    yield os.path.join(dirpath, f)
+        else:
+            raise RuntimeError('Path %s is invalid' % path)
+
+    # @profile
     def load_train_data(self, path):
         self.logger.info('Load training data: ' + path)
 
-        data = np.load(path)
+        if os.path.isdir(path):
+            files = [f for f in self.iter_files(path)]
+            files = list(filter(lambda f: f.endswith("wpp.npy"), files))
 
-        labels = list()
-        titles = dict()
-        embeddings = list()
-        context = list()
+            random.shuffle(files)
+        else:
+            files = [path]
 
-        doc_counter = 0
-        for data_dict in data:
-            doc_id = data_dict['doc_index']
-            doc_id = doc_counter
-            titles[doc_id] = data_dict['doc_title']
-            ctx = data_dict['doc_window']
+        self.train_state['total_files'] = len(files)
 
-            e = data_dict['pivot_embeddings']
+        for f in files:
+            self.logger.info("Doing file: " + f)
+            self.train_state['file_seen_last'] = f
 
-            for emb in e:
-                labels.append([doc_id])
-                embeddings.append(emb)
+            # If we cannot read the file, stop
+            try:
+                data = np.load(f)
+            except:
+                yield None, None, None, None
 
-                # neg_ctx = self.negative_samples(data, ctx, 1)
-                context.append(self.fill_contexts(ctx))
+            self.train_state['files_seen'].append(f)
 
-            doc_counter += 1
+            labels = list()
+            titles = dict()
+            embeddings = list()
+            context = list()
 
-        return labels, embeddings, context, titles
+            for data_dict in data:
+                doc_id = data_dict['doc_index']
+                doc_id = self.__map_data(doc_id)
+                titles[doc_id] = data_dict['doc_title']
+                ctx = data_dict['doc_window']
+
+                e = data_dict['pivot_embeddings']
+
+                for emb in e:
+                    labels.append([doc_id])
+                    embeddings.append(emb)
+
+                    # neg_ctx = self.negative_samples(data, ctx, 1)
+                    context.append(self.fill_contexts(ctx))
+
+            yield labels, embeddings, context, titles
 
     def load_test_data(self, path):
         self.logger.info('Load test data: ' + path)
@@ -130,6 +174,14 @@ class Word2Doc:
 
         return labels, embeddings, context, titles
 
+    def __map_data(self, id):
+        if id in self.data_mapping:
+            return self.data_mapping[id]
+
+        self.data_mapping[id] = self.mapping_counter
+        self.mapping_counter += 1
+        return self.mapping_counter - 1
+
     def fill_contexts(self, ctx):
         while len(ctx) < 10:
             ctx.append(0)
@@ -148,55 +200,39 @@ class Word2Doc:
         with open(os.path.join(constants.get_tensorboard_path(), model_name + ".tsv"), "w") as text_file:
             text_file.write(content)
 
-        # Save for Model
+        # Save for model
         with open(os.path.join(constants.get_word2doc_dir(), model_name + ".tsv"), "w") as text_file:
             text_file.write(content)
 
     def normalize_context(self, ctx):
-        ctx = list(ctx)
-        doc_titles = self.doc_db.get_doc_ids()
-        ctx_titles = {}
-
-        i = 0
-        mapping = {}
-        for context in ctx:
-            for num in context:
-                if num not in mapping:
-                    mapping[num] = i
-                    ctx_titles[i] = doc_titles[num]
-                    i += 1
+        for sub_ctx in ctx:
+            for num in sub_ctx:
+                if num not in self.ctx_data_mapping:
+                    self.ctx_data_mapping[num] = self.ctx_mapping_counter
+                    self.title_mapping[self.ctx_mapping_counter] = self.doc_titles[num]
+                    self.ctx_mapping_counter += 1
 
         i = 0
         for context in ctx:
-            ctx[i] = list(map(lambda n: mapping[n], context))
+            ctx[i] = list(map(lambda n: self.ctx_data_mapping[n], context))
             i += 1
 
-        return ctx, ctx_titles
+        return ctx
 
-    def normalize_test_context(self, old_ctx, new_ctx):
+    def normalize_test_context(self, testing_ctx):
         """Map testing context docs to the domain of the training context docs
         (i.e. [0, 5M] -> [0, 47k] with 5k training samples"""
 
-        # Create mapping
-        old_ctx = list(old_ctx)
+        ctx = list(testing_ctx)
         i = 0
-        mapping = {}
-        for context in old_ctx:
-            for num in context:
-                if num not in mapping:
-                    mapping[num] = i
-                    i += 1
 
-        # Map testing context domain to training context domain
-        ctx = list(new_ctx)
-        i = 0
-        for context in new_ctx:
+        for context in testing_ctx:
 
             # Map if possible (sometimes documents are not in the training domain range, so they have to be duplicated)
             single_ctx = list()
             for num in context:
-                if num in mapping:
-                    single_ctx.append(mapping[num])
+                if num in self.ctx_data_mapping:
+                    single_ctx.append(self.ctx_data_mapping[num])
 
             if len(single_ctx) == 0:
                 ctx[i] = -1
@@ -315,7 +351,8 @@ class Word2Doc:
 
         def __apply_dropout(mode, tensor, dropout_value):
             """Applies dropout, but only if we are in training."""
-            return tf.cond(tf.greater(mode, tf.constant(0)), lambda: tensor, lambda: tf.nn.dropout(tensor, dropout_value))
+            return tf.cond(tf.greater(mode, tf.constant(0)), lambda: tensor,
+                           lambda: tf.nn.dropout(tensor, dropout_value))
 
         n_embedding = self.hyper_params['n_embedding']
         n_docs = self.hyper_params['n_classes']
@@ -329,7 +366,8 @@ class Word2Doc:
 
             # Context embeddings
             doc_embeddings = tf.get_variable("doc_embeddings", [47000, n_embedding], dtype=tf.float32)
-            embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context, dtype=tf.float32)
+            embedded_docs = tf.map_fn(lambda doc: tf.nn.embedding_lookup(doc_embeddings, doc), context,
+                                      dtype=tf.float32)
 
             # Contact layers
             concat_embb = tf.concat([embedded_docs, tf.expand_dims(embedded_input, axis=1)], axis=1)
@@ -514,22 +552,6 @@ class Word2Doc:
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
-        # Load data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), data_name))
-
-        if eval:
-            target_eval, embeddings_eval, context_eval, titles_eval = self.load_test_data(
-                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
-            context_eval = self.normalize_test_context(context, context_eval)
-            eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
-
-        context, ctx_titles = self.normalize_context(context)
-
-        # Shuffle data
-        self.logger.info('Shuffling data..')
-        embeddings, context, target = self.shuffle_data(embeddings, context, target)
-        self.logger.info('Done shuffling data.')
-
         # Set up model
         model = self.model_train(1)
 
@@ -547,58 +569,100 @@ class Word2Doc:
         acc_op = model['acc']
         summary_op = model['summary']
 
+        #with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as sess:
         with tf.Session(graph=graph) as sess:
             sess.run(tf.global_variables_initializer())
 
             # Set up TensorBoard
             writer = tf.summary.FileWriter(log_path, sess.graph)
-            config = projector.ProjectorConfig()
+            config_tb = projector.ProjectorConfig()
 
             # Config embeddings projector
-            embedding = config.embeddings.add()
+            embedding = config_tb.embeddings.add()
             embedding.tensor_name = "doc_embeddings"
 
-            self.logger.info("Starting training..")
+            self.train_state['total_epochs'] = self.hyper_params['epochs']
 
             for epoch in range(1, self.hyper_params['epochs'] + 1):
 
-                batches = self.get_batches(embeddings, context, target)
-                self.logger.info("Epoch " + str(epoch) + "/" + str(self.hyper_params['epochs']))
+                self.train_state['epoch'] = epoch
 
-                counter = 0
-                num_batches = self.get_num_batches(embeddings)
-                with tqdm(total=num_batches) as pbar:
-                    for batch in tqdm(batches):
+                data_gen = self.load_train_data("./data/w2d-test")
 
-                        # Shuffle order of context docs within tensor
-                        for b in batch[1]:
-                            shuffle(b)
+                if eval:
+                    fake_data_gen = self.load_train_data("./data/w2d-test/3-wpp.npy")
+                    for target, embeddings, context, titles in fake_data_gen:
+                        self.normalize_context(context)
 
-                        feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [0]}
-                        summary, _ = sess.run([summary_op, optimizer], feed_dict=feed)
+                # Load data
+                for target, embeddings, context, titles in data_gen:
 
-                        # Update train TensorBoard
-                        writer.add_summary(summary, epoch * num_batches + counter)
+                    # Unable to read a training file, so we are going to quit here and manually debug
+                    if target is None:
+                        self.logger.fatal('Error: Unable to read data')
 
-                        # Update state
-                        counter += 1
-                        pbar.update()
+                        if not len(self.train_state['files_seen']) == 0:
+                            self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name + "_PARTIAL"))
 
-                        # Perform eval every nth step
-                        if counter % 10 == 0:
+                        # Save state before exiting
+                        self.logger.info("State: " + str(self.train_state))
+                        with open(os.path.join(constants.get_logs_dir(), model_name + "_PARTIAL_state" + '.json'),
+                                  'w') as fp:
+                            json.dump(self.train_state, fp, sort_keys=True, indent=4)
+                        sys.exit()
 
-                            # Eval using training data
-                            feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [1]}
-                            summary_train, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
-                            writer.add_summary(summary_train, epoch * num_batches + counter)
+                    if eval:
+                        target_eval, embeddings_eval, context_eval, titles_eval = self.load_test_data(
+                            os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
+                        context_eval = self.normalize_test_context(context_eval)
+                        eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
 
-                            # Eval using testing data
-                            if eval:
-                                index = randint(0, len(eval_batches) - 1)
-                                x, c, y = zip(*eval_batches[index])
-                                feed = {inputs_pl: x, context_pl: c, labels_pl: y, mode_pl: [2]}
-                                summary_eval, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
-                                writer.add_summary(summary_eval, epoch * num_batches + counter)
+                    context = self.normalize_context(context)
+
+                    # Shuffle data
+                    self.logger.info('Shuffling data..')
+                    embeddings, context, target = self.shuffle_data(embeddings, context, target)
+                    self.logger.info('Done shuffling data.')
+
+                    self.logger.info("Starting training..")
+
+                    batches = self.get_batches(embeddings, context, target)
+                    self.logger.info("Epoch " + str(epoch) + "/" + str(self.hyper_params['epochs']))
+
+                    counter = 0
+                    num_batches = self.get_num_batches(embeddings)
+                    with tqdm(total=num_batches) as pbar:
+                        for batch in tqdm(batches):
+
+                            # Shuffle order of context docs within tensor
+                            for b in batch[1]:
+                                shuffle(b)
+
+                            feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [0]}
+                            summary, op = sess.run([summary_op, optimizer], feed_dict=feed)
+
+                            # Update train TensorBoard
+                            writer.add_summary(summary, epoch * num_batches + counter)
+
+                            # Update state
+                            counter += 1
+                            pbar.update()
+
+                            # Perform eval every nth step
+                            if counter % 10 == 0:
+
+                                # Eval using training data
+                                feed = {inputs_pl: batch[0], context_pl: batch[1], labels_pl: batch[2], mode_pl: [1]}
+                                summary_train, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                                writer.add_summary(summary_train, epoch * num_batches + counter)
+
+                                # Eval using testing data
+                                if eval:
+                                    index = randint(0, len(eval_batches) - 1)
+                                    x, c, y = zip(*eval_batches[index])
+                                    feed = {inputs_pl: x, context_pl: c, labels_pl: y, mode_pl: [2]}
+                                    summary_eval, loss, acc = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                                    writer.add_summary(summary_eval, epoch * num_batches + counter)
 
                         # Save every nth step
                         if counter % 50 == 0:
@@ -608,40 +672,19 @@ class Word2Doc:
             self.saver.save(sess, os.path.join(constants.get_tensorboard_path(), model_name))
             self.saver.save(sess, os.path.join(constants.get_word2doc_dir(), model_name))
 
-            self.create_embedding_labels_file(model_name, ctx_titles, 2000)
-            projector.visualize_embeddings(writer, config)
+            self.create_embedding_labels_file(model_name, self.title_mapping, 2000)
+            projector.visualize_embeddings(writer, config_tb)
 
     def eval(self):
-        #self.eval_impl(mode=1)
+        self.eval_impl(mode=1)
 
         total_acc = 0
         for i in range(0, 10):
             total_acc += self.eval_impl(mode=2)
 
-        self.logger.info("Total testing accuracy: " + str(float(total_acc / 1)))
+        self.logger.info("Total testing accuracy: " + str(float(total_acc / 10)))
 
     def eval_impl(self, mode):
-
-        # Load training data
-        target, embeddings, context, titles = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
-        context_train, ctx_titles = self.normalize_context(context)
-
-        if mode == 2:
-            # Load testing data instead
-            target, embeddings, context_test, titles_test = self.load_test_data(
-                os.path.join(constants.get_word2doc_dir(), 'word2doc-test-400_normal.npy'))
-            context = self.normalize_test_context(context, context_test)
-            embeddings, target, context = self.filter_test_data(embeddings, target, context)
-            self.hyper_params['batch_size'] = 1
-
-            target = self.normalize_test_labels(target, titles, titles_test)
-        else:
-            context, ctx_titles = self.normalize_context(context)
-
-        # Shuffle data
-        self.logger.info('Shuffling data..')
-        embeddings, context, target = self.shuffle_data(embeddings, context, target)
-        self.logger.info('Done shuffling data.')
 
         # Set up model
         model = self.model_eval(10)
@@ -662,57 +705,82 @@ class Word2Doc:
         with tf.Session(graph=graph) as sess:
             self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_test_avg"))
 
-            num_batches = self.get_num_batches(embeddings)
+            # Load training data
+            data_gen = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
-            # Set batch size to 1 if we are using hand picked test set
-            if mode == 2:
-                batches = self.get_eval_batches(embeddings, context, target)
-                self.hyper_params['eval_fraction'] = 1
-            else:
-                batches = self.get_batches(embeddings, context, target)
+            for target, embeddings, context, titles in data_gen:
+                context_train, ctx_titles = self.normalize_context(context)
 
-            n_eval = int(num_batches * self.hyper_params['eval_fraction'])
+                if mode == 2:
+                    # Load testing data instead
+                    target, embeddings, context_test, titles_test = self.load_test_data(
+                        os.path.join(constants.get_word2doc_dir(), 'word2doc-test-400_normal.npy'))
+                    context = self.normalize_test_context(context, context_test)
+                    embeddings, target, context = self.filter_test_data(embeddings, target, context)
+                    self.hyper_params['batch_size'] = 1
 
-            self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
-                             str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
+                    target = self.normalize_test_labels(target, titles, titles_test)
+                else:
+                    context, ctx_titles = self.normalize_context(context)
 
-            total_acc = 0
-            total_loss = 0
+                # Shuffle data
+                self.logger.info('Shuffling data..')
+                embeddings, context, target = self.shuffle_data(embeddings, context, target)
+                self.logger.info('Done shuffling data.')
 
-            counter = 0
-            with tqdm(total=n_eval) as pbar:
-                for batch in tqdm(batches):
+                self.saver.restore(sess, os.path.join(constants.get_word2doc_dir(), "word2doc_model_5000_100e_10ctx_dropout_v2"))
 
-                    # Only do X% of data
-                    if counter >= n_eval:
-                        break
+                num_batches = self.get_num_batches(embeddings)
 
-                    # for b in batch[1]:
-                    # shuffle(b)
-                    if mode == 2:
-                        x, c, y = zip(*batch)
-                    else:
-                        x, c, y = batch[0], batch[1], batch[2]
+                # Set batch size to 1 if we are using hand picked test set
+                if mode == 2:
+                    batches = self.get_eval_batches(embeddings, context, target)
+                    self.hyper_params['eval_fraction'] = 1
+                else:
+                    batches = self.get_batches(embeddings, context, target)
 
-                    feed = {inputs_pl: x, context_pl: c, labels_pl: y}
-                    summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+                n_eval = int(num_batches * self.hyper_params['eval_fraction'])
 
-                    # Update state
-                    total_loss += l
-                    total_acc += a
-                    counter += 1
-                    pbar.update()
+                self.logger.info("Starting evaluation across " + str(n_eval) + " (" +
+                                 str(self.hyper_params['eval_fraction'] * 100) + "%) randomly chosen elements")
 
-            total_loss = total_loss / counter
-            total_acc = total_acc / counter
+                total_acc = 0
+                total_loss = 0
 
-            # Print results
-            if mode == 1:
-                self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
-            else:
-                self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
+                counter = 0
+                with tqdm(total=n_eval) as pbar:
+                    for batch in tqdm(batches):
 
-            return total_acc
+                        # Only do X% of data
+                        if counter >= n_eval:
+                            break
+
+                        # for b in batch[1]:
+                        # shuffle(b)
+                        if mode == 2:
+                            x, c, y = zip(*batch)
+                        else:
+                            x, c, y = batch[0], batch[1], batch[2]
+
+                        feed = {inputs_pl: x, context_pl: c, labels_pl: y}
+                        summary, l, a = sess.run([summary_op, loss_op, acc_op], feed_dict=feed)
+
+                        # Update state
+                        total_loss += l
+                        total_acc += a
+                        counter += 1
+                        pbar.update()
+
+                total_loss = total_loss / counter
+                total_acc = total_acc / counter
+
+                # Print results
+                if mode == 1:
+                    self.logger.info("Train loss: " + str(total_loss) + " -- Train accuracy: " + str(total_acc))
+                else:
+                    self.logger.info("Test loss: " + str(total_loss) + " -- Test accuracy: " + str(total_acc))
+
+                return total_acc
 
     def predict(self, x, c):
         model = self.predict_model

@@ -51,9 +51,6 @@ def handle_model_type(args):
         if args.model_action == 'pre-process':
             pre_processor = pre_process.Word2DocPreprocessor()
             pre_process_loop(args, pre_processor)
-        elif args.model_action == 'merge-bins':
-            pre_processor = pre_process.Word2DocPreprocessor()
-            pre_processor.merge_bins(args.num_bins)
 
         # Neural net
         elif args.model_action == 'train':
