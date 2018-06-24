@@ -28,6 +28,9 @@ To use word2doc, you need to do the following:
 1. Download a Wikipedia dump and build a document retriever model from the dump. [This script](https://github.com/jundl77/word2doc/blob/master/src/build-doc-retriever-model.py) will do that task.
 2. Download and set up GloVe and InferSent models, directions can be found [here](https://github.com/facebookresearch/InferSent).
 
+Model paths and other constants can be changed in [constants.py](https://github.com/jundl77/word2doc/blob/master/src/word2doc/util/constants.py).
+
+
 Once the steps above have been completed successfully, [optimize.py](https://github.com/jundl77/word2doc/blob/master/src/optimize.py) can be used to pre-process data, train and evaluate models.
 
 First, the data has to be pre-processed using the following command:
@@ -57,3 +60,14 @@ Note that paths need to be set accordingly. To do so, have a look at [word2doc.p
 Hyperparameters are set in [word2doc.py](https://github.com/jundl77/word2doc/blob/master/src/word2doc/optimizer/net/word2doc.py) as well.
 
 ## Word2doc Components
+
+Word2doc has three major components: Facebook's document retriever from [DrQA](https://github.com/facebookresearch/DrQA), Facebook's sentence embeddings tool, [InferSent](https://github.com/facebookresearch/InferSent), and word2doc's neural network.
+
+Each component can be tested individualy. To test InferSent, go to their repository. To test the document retriever, run:
+
+```
+python src/model-interactive.py PATH_TO_WIKI_DB --model PATH_TO_MODEL
+```
+where ```PATH_TO_WIKI_DB``` is the path to the sqlite database containing the Wikipedia dump, and ```PATH_TO_MODEL``` is the path to the document retriever model.
+
+To test word2oc as a whole, have a look at the [demo](#demo) section.
