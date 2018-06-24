@@ -5,9 +5,9 @@ This is a tensorflow implementation to word2doc, my bachelor thesis.
 ## Quick Links
 
 - [About](#keyword-based-document-retrieval-via-document-embeddings)
-- [Demo](#quick-start-demo)
-- [Installation](#installing-drqa)
-- [Components](#drqa-components)
+- [Demo](#demo)
+- [Installation](#installing-word2doc)
+- [Components](#word2doc-components)
 
 ## Keyword Based Document Retrieval via Document Embeddings
 
@@ -19,4 +19,8 @@ I tested word2doc by comparing results with a frequency-based document retriever
 
 In conclusion, word2doc shows that document retrieval via document embeddings has potential. In order to fully test the performance, however, word2doc has to be trained on the entire Wikipedia corpus and not just on 1%.
 
-## Usage
+## Demo
+
+## Installing word2doc
+
+## Word2doc Components
