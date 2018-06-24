@@ -21,7 +21,15 @@ In conclusion, word2doc shows that document retrieval via document embeddings ha
 
 ## Demo
 
-Run [model-interactive.py](https://github.com/jundl77/word2doc/blob/master/src/model-interactive.py) to drop into an interactive session. From there the word2doc can be tested. You need to specify a trained model as well as a pre-processed training data from which word2doc will choose a document to return. Thus your query should fit a document contained in the pre-processed training data.
+Run [model-interactive.py](https://github.com/jundl77/word2doc/blob/master/src/model-interactive.py) to drop into an interactive session. From there the word2doc can be tested. You need to specify a trained model as well as a pre-processed training data from which word2doc will choose a document to retrieve. Thus your query should fit a document contained in the pre-processed training data.
+
+Sample data can be downloaded [here]().
+
+To start the script, execute the following command:
+
+```python src/model-interactive.py word2doc TRAIN_DATA --model WORD2DOC_MODEL --top_k TOP_K```
+
+where ```TRAIN_DATA``` is the path to a pre-proccessed batch of training data (in the format of *-wpp.npy), ```WORD2DOC_MODEL``` is a trained word2doc model, and ```TOP_K``` is the number of documents that should be retrieved.
 
 ## Using word2doc
 
@@ -68,7 +76,7 @@ Word2doc has three major components: Facebook's document retriever from [DrQA](h
 Each component can be tested individualy. To test InferSent, go to their repository. To test the document retriever, run:
 
 ```
-python src/model-interactive.py PATH_TO_WIKI_DB --model PATH_TO_MODEL
+python src/model-interactive.py doc_ret PATH_TO_WIKI_DB --model PATH_TO_MODEL
 ```
 where ```PATH_TO_WIKI_DB``` is the path to the sqlite database containing the Wikipedia dump, and ```PATH_TO_MODEL``` is the path to the document retriever model.
 
