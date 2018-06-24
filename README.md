@@ -25,7 +25,7 @@ In conclusion, word2doc shows that document retrieval via document embeddings ha
 
 To use word2doc, you need to do the following:
 
-1. Download a Wikipedia dump and build a document retriever model from the dump. [This script](https://github.com/jundl77/word2doc/blob/master/src/data-pipeline.py) will do that task.
+1. Download a Wikipedia dump and build a document retriever model from the dump. [This script](https://github.com/jundl77/word2doc/blob/master/src/build-doc-retriever-model.py) will do that task.
 2. Download and set up GloVe and InferSent models, directions can be found [here](https://github.com/facebookresearch/InferSent).
 
 Once the steps above have been completed successfully, [optimize.py](https://github.com/jundl77/word2doc/blob/master/src/optimize.py) can be used to pre-process data, train and evaluate models.
