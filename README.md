@@ -1,6 +1,6 @@
 # word2doc
 
-This is a tensorflow implementation to word2doc, my bachelor thesis.
+This is a tensorflow implementation to word2doc, my bachelor thesis. Word2doc is a document retrieval system utilizing document embeddings.
 
 ## Quick Links
 
