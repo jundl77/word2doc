@@ -23,7 +23,7 @@ In conclusion, word2doc shows that document retrieval via document embeddings ha
 
 Run [model-interactive.py](https://github.com/jundl77/word2doc/blob/master/src/model-interactive.py) to drop into an interactive session. From there the word2doc can be tested. You need to specify a trained model as well as a pre-processed training data from which word2doc will choose a document to retrieve. Thus your query should fit a document contained in the pre-processed training data.
 
-Sample data can be downloaded [here](https://www.dropbox.com/s/wclq1kdpl66dxzv/w2d-data.zip?dl=0).
+Sample data can be downloaded from [here](https://www.dropbox.com/s/wclq1kdpl66dxzv/w2d-data.zip?dl=0).
 
 To start the script, execute the following command:
 
