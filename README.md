@@ -2,6 +2,13 @@
 
 This is a tensorflow implementation to word2doc, my bachelor thesis.
 
+## Quick Links
+
+- [About](#keyword-based-document-retrieval-via-document-embeddings)
+- [Demo](#quick-start-demo)
+- [Installation](#installing-drqa)
+- [Components](#drqa-components)
+
 ## Keyword Based Document Retrieval via Document Embeddings
 
 Many different kinds of document retrieval systems exist today using various approaches. Many rely on simple frequency statistics while others utilize neural networks to retrieve documents. Here I present a document retrieval system called word2doc. Its purpose is to gain a semantic understanding of the query and indexed documents in order to improve retrieval results.
