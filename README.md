@@ -25,7 +25,35 @@ In conclusion, word2doc shows that document retrieval via document embeddings ha
 
 To use word2doc, you need to do the following:
 
-1. Download and preprocess a Wikipedia dump.
+1. Download a Wikipedia dump and build a document retriever model from the dump. [This script](https://github.com/jundl77/word2doc/blob/master/src/data-pipeline.py) will do that task.
 2. Download and set up GloVe and InferSent models, directions can be found [here](https://github.com/facebookresearch/InferSent).
+
+Once the steps above have been completed successfully, [optimize.py](https://github.com/jundl77/word2doc/blob/master/src/optimize.py) can be used to pre-process data, train and evaluate models.
+
+First, the data has to be pre-processed using the following command:
+
+```
+python src/optimize.py word2doc pre-process --bin-id BIN_ID --num-bins NUM_OF_TOTAL_BINS --num-workers NUMB_WORKERS
+```
+
+The command above is meant to be executed on a cluster. The Wikipedia dump will then be split into ```NUM_OF_TOTAL_BINS``` and ```BIN_ID``` refers to the bin number that should be processed. ```NUMB_WORKERS``` is the number of workers active.
+
+When an entire Wikipedia dump is processed this away, ~600GB of data are created.
+
+To train word2doc, use:
+
+```
+python src/optimize.py word2doc train
+```
+
+and to evaluate wor2doc, use:
+
+```
+python src/optimize.py word2doc eval
+```
+
+Note that paths need to be set accordingly. To do so, have a look at [word2doc.py](https://github.com/jundl77/word2doc/blob/master/src/word2doc/optimizer/net/word2doc.py), and [constants.py](https://github.com/jundl77/word2doc/blob/master/src/word2doc/util/constants.py)
+
+Hyperparameters are set in [word2doc.py](https://github.com/jundl77/word2doc/blob/master/src/word2doc/optimizer/net/word2doc.py) as well.
 
 ## Word2doc Components
