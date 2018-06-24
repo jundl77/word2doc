@@ -101,7 +101,6 @@ class Word2Doc:
         else:
             raise RuntimeError('Path %s is invalid' % path)
 
-    # @profile
     def load_train_data(self, path):
         self.logger.info('Load training data: ' + path)
 
@@ -569,7 +568,6 @@ class Word2Doc:
         acc_op = model['acc']
         summary_op = model['summary']
 
-        #with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as sess:
         with tf.Session(graph=graph) as sess:
             sess.run(tf.global_variables_initializer())
 
@@ -589,6 +587,7 @@ class Word2Doc:
 
                 data_gen = self.load_train_data("./data/w2d-test")
 
+                # If we have eval data, init the instance variables with the eval data
                 if eval:
                     fake_data_gen = self.load_train_data("./data/w2d-test/3-wpp.npy")
                     for target, embeddings, context, titles in fake_data_gen:
@@ -612,9 +611,14 @@ class Word2Doc:
                         sys.exit()
 
                     if eval:
+                        # Load testing data
                         target_eval, embeddings_eval, context_eval, titles_eval = self.load_test_data(
                             os.path.join(constants.get_word2doc_dir(), 'word2doc-test-bin-3.npy'))
                         context_eval = self.normalize_test_context(context_eval)
+                        embeddings_eval, target_eval, context_eval = self.filter_test_data(embeddings_eval,
+                                                                                           target_eval, context_eval)
+                        target_eval = self.normalize_test_labels(target_eval, titles, titles_eval)
+
                         eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
 
                     context = self.normalize_context(context)
@@ -709,13 +713,12 @@ class Word2Doc:
             data_gen = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
             for target, embeddings, context, titles in data_gen:
-                context_train, ctx_titles = self.normalize_context(context)
 
                 if mode == 2:
                     # Load testing data instead
                     target, embeddings, context_test, titles_test = self.load_test_data(
                         os.path.join(constants.get_word2doc_dir(), 'word2doc-test-400_normal.npy'))
-                    context = self.normalize_test_context(context, context_test)
+                    context = self.normalize_test_context(context_test)
                     embeddings, target, context = self.filter_test_data(embeddings, target, context)
                     self.hyper_params['batch_size'] = 1
 
