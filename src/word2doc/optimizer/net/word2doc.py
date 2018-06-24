@@ -35,8 +35,10 @@ class Word2Doc:
         self.data_mapping = {}
         self.ctx_data_mapping = {}
         self.title_mapping = {}
+        self.label_titles = {}
         self.mapping_counter = 0
         self.ctx_mapping_counter = 0
+        self.target_title_counter = 0
         self.doc_titles = self.doc_db.get_doc_ids()
 
         self.train_state = {
@@ -53,8 +55,8 @@ class Word2Doc:
             'TRAINING PARAMS': '',
             'loss_func': 'sampled_softmax_loss',
             'optimizer': 'adam',
-            'epochs': 100,
-            'batch_size': 64,
+            'epochs': 30,
+            'batch_size': 256,
             'eval_batch_size': 1,
             'n_input': 4096,
             'n_context_docs': 10,
@@ -69,7 +71,7 @@ class Word2Doc:
             'embedding_activation': 'relu',
             '  ': '',
             'OUTPUT LAYER': '',
-            'n_classes': 200,
+            'n_classes': 5000,
             'out_activation': 'softmax',
         }
 
@@ -247,6 +249,27 @@ class Word2Doc:
             i += 1
 
         return ctx
+
+    def update_target_titles(self, target, titles):
+        target_new = list(target)
+
+        for key, title in titles.items():
+            if title not in self.label_titles.values():
+                self.label_titles[self.target_title_counter] = title
+                self.target_title_counter += 1
+
+        self.logger.info("Updating target and title indices")
+        i = 0
+        with tqdm(total=len(target)) as pbar:
+            for tar in tqdm(target):
+                for key, val in self.label_titles.items():
+                    if val == titles[tar[0]]:
+                        target_new[i][0] = key
+                        break
+                i += 1
+                pbar.update()
+
+        return target_new
 
     def normalize_test_labels(self, target, titles, titles_test):
         i = 0
@@ -546,8 +569,7 @@ class Word2Doc:
     # -----------------------------------------------------------------------------------------------------------------
 
     def train(self, eval=True):
-        data_name = "72t-wpp.npy"
-        model_name = "word2doc_71_1p_mac"
+        model_name = "word2doc_mft"
         model_id = str(int(round(time.time())))
         log_path = self.create_run_log(model_id)
 
@@ -595,6 +617,7 @@ class Word2Doc:
 
                 # Load data
                 for target, embeddings, context, titles in data_gen:
+                    target = self.update_target_titles(target, titles)
 
                     # Unable to read a training file, so we are going to quit here and manually debug
                     if target is None:
@@ -617,7 +640,8 @@ class Word2Doc:
                         context_eval = self.normalize_test_context(context_eval)
                         embeddings_eval, target_eval, context_eval = self.filter_test_data(embeddings_eval,
                                                                                            target_eval, context_eval)
-                        target_eval = self.normalize_test_labels(target_eval, titles, titles_eval)
+
+                        target_eval = self.update_target_titles(target_eval, titles_eval)
 
                         eval_batches = self.get_eval_batches(embeddings_eval, context_eval, target_eval)
 
@@ -713,6 +737,7 @@ class Word2Doc:
             data_gen = self.load_train_data(os.path.join(constants.get_word2doc_dir(), '3-wpp.npy'))
 
             for target, embeddings, context, titles in data_gen:
+                target = self.update_target_titles(target, titles)
 
                 if mode == 2:
                     # Load testing data instead
@@ -722,7 +747,7 @@ class Word2Doc:
                     embeddings, target, context = self.filter_test_data(embeddings, target, context)
                     self.hyper_params['batch_size'] = 1
 
-                    target = self.normalize_test_labels(target, titles, titles_test)
+                    target = self.update_target_titles(target, titles_test)
                 else:
                     context, ctx_titles = self.normalize_context(context)
 
