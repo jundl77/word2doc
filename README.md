@@ -6,7 +6,7 @@ This is a tensorflow implementation to word2doc, my bachelor thesis.
 
 - [About](#keyword-based-document-retrieval-via-document-embeddings)
 - [Demo](#demo)
-- [Installation](#installing-word2doc)
+- [Usage](#using-word2doc)
 - [Components](#word2doc-components)
 
 ## Keyword Based Document Retrieval via Document Embeddings
@@ -21,6 +21,11 @@ In conclusion, word2doc shows that document retrieval via document embeddings ha
 
 ## Demo
 
-## Installing word2doc
+## Using word2doc
+
+To use word2doc, you need to do the following:
+
+1. Download and preprocess a Wikipedia dump.
+2. Download and set up GloVe and InferSent models, directions can be found [here](https://github.com/facebookresearch/InferSent).
 
 ## Word2doc Components
