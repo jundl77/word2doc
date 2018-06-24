@@ -16,7 +16,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='word2doc',
-    version='0.0.1',
+    version='0.9.0',
     description='Bachelor thesis',
     long_description=readme,
     author='Julian Brendl',
