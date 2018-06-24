@@ -1,3 +1,0 @@
-CMDLINE python src/optimize.py word2doc train --path data/squad/dev-v1.1 --bin-id 2
-MEM 0.316406 1524509281.0221
-MEM 7.988281 1524509281.1223
