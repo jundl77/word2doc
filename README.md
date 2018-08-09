@@ -2,6 +2,8 @@
 
 This is a tensorflow implementation to word2doc, my bachelor thesis. Word2doc is a document retrieval system utilizing document embeddings.
 
+The full thesis can be found here: https://github.com/jundl77/bachelor-thesis/blob/master/thesis.pdf.
+
 ## Quick Links
 
 - [About](#keyword-based-document-retrieval-via-document-embeddings)
@@ -18,6 +20,8 @@ In contrast to most existing retrievers, word2doc learns semantic meaning by com
 I tested word2doc by comparing results with a frequency-based document retriever developed by Facebook [(Chen et al., 2017)](https://arxiv.org/abs/1704.00051). In this thesis, both systems operate on the Wikipedia corpus. However word2doc was only trained on 1% of the full corpus. Yet results are promising, showing that word2doc outperforms Facebook’s system when it comes to pure retrieval accuracies. However, word2doc is struggling with the retrieval of ranked document sets. While word2doc is adequate at identifying the target document, it is unable to retrieve document sets that are relevant to the target document. My two main explanations for this are as follows: Word2doc was only trained on 1% of the full Wikipedia corpus, whereas Facebook’s system had the entire corpus at its disposal. Thus, word2doc had fewer relevant documents that could be retrieved. Furthermore, word2doc optimizes on accuracies and not on the ranking quality of a retrieved document set. Hence, it is possible that logits in the final softmax layer do not reflect a ranking and only reflect the single best document.
 
 In conclusion, word2doc shows that document retrieval via document embeddings has potential. In order to fully test the performance, however, word2doc has to be trained on the entire Wikipedia corpus and not just on 1%.
+
+The full thesis can be found here: https://github.com/jundl77/bachelor-thesis/blob/master/thesis.pdf.
 
 ## Demo
 
